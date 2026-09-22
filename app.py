@@ -11,6 +11,7 @@ Run single-process. See discstakka/device.py for why.
 
 import math
 import os
+import socketserver
 
 from flask import (
     Flask,
@@ -22,6 +23,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.serving import ThreadedWSGIServer
 
 from discstakka import device, flows, jobs
 from discstakka.catalog import art, db, taxonomy
@@ -446,11 +448,30 @@ def too_large(_exc):
     ), 413
 
 
+class _Server(ThreadedWSGIServer):
+    def server_bind(self):
+        # http.server reverse-resolves the bound address with getfqdn() before
+        # it listens. Where that lookup stalls, as on the macOS CI runners, the
+        # port stays closed for over 30 s. Werkzeug never reads the name.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
+def serve(host, port):
+    """What app.run(threaded=True) does, minus the hostname lookup.
+
+    Threaded so a poll request is served while a job runs; the device itself
+    stays single-owner.
+    """
+    server = _Server(host, port, app)
+    server.log_startup()
+    server.serve_forever()
+
+
 if __name__ == "__main__":
-    # 0.0.0.0 so the PS3 can reach it. threaded=True lets a poll request be
-    # served while a job runs; the device itself stays single-owner.
+    # 0.0.0.0 so the PS3 can reach it.
     #
     # Not port 5000: on macOS that belongs to Control Center's AirPlay
     # Receiver, which answers every request with a bare 403.
-    created = create_app()
-    created.run(host="0.0.0.0", port=config.port, threaded=True, debug=False)
+    create_app()
+    serve("0.0.0.0", config.port)

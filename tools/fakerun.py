@@ -109,7 +109,7 @@ def main(argv):
         db_path=config.db_path,
         trace_dir=config.trace_dir,
     )
-    created = app_module.create_app(config, controller)
+    app_module.create_app(config, controller)
 
     print(__doc__.split("Usage:")[0].strip())
     print("\ndata     %s" % data_dir)
@@ -119,7 +119,7 @@ def main(argv):
 
     threading.Thread(target=console, args=(unit, transport), daemon=True).start()
     try:
-        created.run(host=host, port=port, threaded=True, debug=False)
+        app_module.serve(host, port)
     finally:
         if keep is None:
             shutil.rmtree(data_dir, ignore_errors=True)
