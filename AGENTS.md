@@ -50,8 +50,6 @@ python app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the
 python tools/ps3lint.py    # needs the server running
 ```
 
-`run.sh` is a shortcut for `python app.py` on macOS and Linux.
-
 - Talking to the unit needs USB HID access for the account running the app.
   On Linux that usually means a udev rule for `0718:d000`.
 - Run the suite after any change. It needs no hardware and does not touch
@@ -147,7 +145,7 @@ console you can't see.
   without it every `compose stop` stalls to the timeout and then SIGKILLs.
 - Templates and static files are baked in, so `TEMPLATES_AUTO_RELOAD` does
   nothing there. Editing either needs a rebuild.
-- One owner at a time. A native `run.sh` and the container will both open the
+- One owner at a time. A native `app.py` and the container will both open the
   device, and the libusb backend detaches the kernel driver while it holds it.
 - `docker-entrypoint.sh` is a preflight, not a supervisor. It reports what the app
   cannot - hidapi loses the errno, so a wrong group and a missing cgroup rule are

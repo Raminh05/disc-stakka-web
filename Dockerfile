@@ -1,5 +1,5 @@
 # Linux hosts only. Docker Desktop on macOS has no USB pass-through, so macOS
-# keeps running the app natively through run.sh.
+# keeps running app.py natively.
 FROM python:3.14-slim AS build
 
 # hidapi has no wheel for every interpreter, and pip then builds it from the

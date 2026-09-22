@@ -12,7 +12,6 @@ static/art
 # Host-side or macOS-only files.
 deploy
 flake.nix
-run.sh
 *.md
 
 # The simulated carousel and its runner are development tools, and fakerun.py

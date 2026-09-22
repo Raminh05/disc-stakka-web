@@ -11,7 +11,7 @@ project. See [Prior work](#prior-work).
 ## Running it
 
 ```sh
-./run.sh          # http://0.0.0.0:5050
+./.venv/bin/python app.py          # http://0.0.0.0:5050
 ```
 
 Then browse to `http://<this-machine>:5050/` from anywhere on the LAN.
@@ -21,14 +21,14 @@ every request with a bare 403.
 
 **Run it single-process.** The HID handle and the job registry live in memory,
 so a multi-worker WSGI server would hand each worker its own device and they
-would fight over it. `run.sh` does the right thing.
+would fight over it. Run `app.py` directly; do not put gunicorn in front of it.
 
 First run creates `data/catalog.db` and a persistent session key.
 
 ## Running it in a container (Linux only)
 
-Not on macOS: Docker Desktop's VM has no USB pass-through, so there `run.sh`
-remains the only way. It also needs **rootful** Docker — rootless cannot delegate
+Not on macOS: Docker Desktop's VM has no USB pass-through, so there running
+`app.py` natively remains the only way. It also needs **rootful** Docker — rootless cannot delegate
 a device cgroup, and supplementary groups don't cross the user namespace, so both
 halves of the permission story below stop working.
 
@@ -81,8 +81,8 @@ off, which the pages then present as local time.
 
 ### Two rules
 
-**One owner at a time.** Nothing stops `./run.sh` on the host and the container
-from both holding the device, and the libusb backend detaches the kernel HID
+**One owner at a time.** Nothing stops a native `app.py` on the host and the
+container from both holding the device, and the libusb backend detaches the kernel HID
 driver while it has the unit claimed. The unit also latches its last reply and
 repeats it, so two pollers quietly steal each other's answers — intermittent, and
 hard to attribute to anything. Publishing port 5050 catches the case where both
