@@ -1,8 +1,14 @@
 """A software Disc Stakka.
 
-Implements the transport interface, so the real protocol.py drives it: the
-message-ID pairing, the latched reply stream, the CARRIES_STATUS filter and the
-retry in require() all run against this exactly as they run against hardware.
+The second implementation of the transport interface, beside HidTransport. The
+real protocol.py drives it exactly as it drives hardware: the message-ID
+pairing, the latched reply stream, the CARRIES_STATUS filter and the retry in
+require() all run unchanged.
+
+It lives in the package rather than in tests/ because it is a fake of this
+project's own interface, not a fixture - the suite uses it, so does
+tools/fakerun.py, and having two implementations of one interface is what keeps
+that interface honest.
 
 The opcodes and status bits here are written out from the 2005 reverse
 engineering (disc-stakka-ctl-0.03) rather than imported from protocol.py. A mock
@@ -26,6 +32,7 @@ DISC_IN_BAY (0x0400) and ACK_TIMEOUT (0x0200).
 
 import heapq
 import random
+import time
 
 VID = 0x0718
 PID = 0xD000
@@ -94,6 +101,22 @@ class Unplugged(OSError):
     """No unit on the bus."""
 
 
+class RealClock(object):
+    """Wall time, in the shape the carousel expects.
+
+    The default. Virtual time is a testing concern and lives in tests/clock.py;
+    for anything a person watches, the carousel should take the seconds it
+    really takes.
+    """
+
+    @property
+    def ms(self):
+        return int(time.monotonic() * 1000)
+
+    def advance_ms(self, ms):
+        pass
+
+
 class Carousel(object):
     """The firmware's own view of the machine.
 
@@ -102,8 +125,8 @@ class Carousel(object):
     thread, so a flow running on the worker thread never races them.
     """
 
-    def __init__(self, clock, occupied=(), serial=0x0DECAF01, unit=0):
-        self.clock = clock
+    def __init__(self, clock=None, occupied=(), serial=0x0DECAF01, unit=0):
+        self.clock = clock if clock is not None else RealClock()
         self.occupied = set(occupied)
         self.serial = serial
         self.unit = unit
@@ -327,9 +350,9 @@ class Carousel(object):
 class SimulatedTransport(object):
     """A Carousel wired up as a transport for DiscStakka."""
 
-    def __init__(self, clock, carousel=None, present=True):
-        self.clock = clock
-        self.carousel = carousel if carousel is not None else Carousel(clock)
+    def __init__(self, clock=None, carousel=None, present=True):
+        self.clock = clock if clock is not None else RealClock()
+        self.carousel = carousel if carousel is not None else Carousel(self.clock)
         self._present = present
         self._opened = False
         self._fail_opens = 0

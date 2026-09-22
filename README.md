@@ -201,6 +201,7 @@ move after one will home the carousel first. That is automatic.
 |---|---|
 | `app.py` | Routes and `create_app()`; stays at the root so Flask finds `templates/` |
 | `discstakka/transport.py` | The only module that imports `hid` |
+| `discstakka/simulator.py` | The simulated carousel, the other transport |
 | `discstakka/protocol.py` | HID protocol, ported from `discstakka.c` |
 | `discstakka/device.py` | Single worker thread owning the device |
 | `discstakka/flows.py` | The eject, add and reset flows |
@@ -217,8 +218,9 @@ move after one will home the carousel first. That is automatic.
 
 ## Testing without a carousel
 
-`tests/fake_device.py` is a simulated Disc Stakka sitting behind the transport
-interface, so the real protocol, flows and routes run against it unchanged.
+`discstakka/simulator.py` is a simulated Disc Stakka: the second implementation
+of the transport interface, beside the hidapi one, so the real protocol, flows
+and routes run against it unchanged.
 Its timings and state machine come from the 25 captured runs in `data/traces`,
 and one test checks that a simulated load still produces the same status
 signature as a recorded one.
@@ -300,7 +302,8 @@ wire and worked it out: the report sizes and packet layout, the opcodes, the
 status bits, the message-ID pairing, and the 50 ms poll the unit demands before
 it resets itself. `discstakka/protocol.py` here is a port of that work, by way
 of the 0.04 tarball's `src/standalone/discstakka.c` and its `readme.txt`, and
-the constants in `tests/fake_device.py` are written out from the same source.
+the constants in `discstakka/simulator.py` are written out from the same
+source.
 
 Two things in the 0.03 `README` are still the best description of failures this
 code has to handle twenty years later: the unit resetting itself roughly every

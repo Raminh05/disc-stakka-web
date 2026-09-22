@@ -12,10 +12,9 @@ import unittest
 
 import app as app_module
 from discstakka import device, protocol
+from discstakka import simulator as fake
 from discstakka.catalog import db
 from discstakka.config import Config
-from tests import fake_device as fake
-from tests.clock import RealClock
 
 REFRESH = re.compile(r'http-equiv=["\']refresh["\']', re.I)
 
@@ -25,8 +24,7 @@ class WebTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="discstakka-web-")
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
-        self.clock = RealClock()
-        self.io = fake.SimulatedTransport(self.clock)
+        self.io = fake.SimulatedTransport()
         self.unit = self.io.carousel
         self.ds = protocol.DiscStakka(self.io)
 

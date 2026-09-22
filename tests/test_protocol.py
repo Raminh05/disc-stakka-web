@@ -8,8 +8,8 @@ hardware without moving a real carousel.
 import unittest
 
 from discstakka import protocol
+from discstakka import simulator as fake
 from discstakka.slots import SLOT_MAX, SLOT_MIN
-from tests import fake_device as fake
 from tests.clock import virtual_clock
 
 

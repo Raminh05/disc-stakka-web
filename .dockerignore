@@ -52,7 +52,6 @@ flake.nix
 *.md
 
 # -- Development tools -----------------------------------------------------
-# fakerun.py imports the simulated carousel from tests/, which does not ship,
-# so leaving it in would put a module in the image that cannot be imported.
+# The suite does not ship. tools/fakerun.py does, and works there now: the
+# simulated carousel it drives is part of the package.
 tests
-tools/fakerun.py

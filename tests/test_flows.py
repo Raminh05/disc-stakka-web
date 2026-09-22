@@ -14,10 +14,10 @@ import tempfile
 import unittest
 
 from discstakka import device, flows, jobs, protocol
+from discstakka import simulator as fake
 from discstakka import trace as trace_module
 from discstakka.catalog import db
 from discstakka.trace import Trace
-from tests import fake_device as fake
 from tests.clock import virtual_clock
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")

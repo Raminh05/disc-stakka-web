@@ -118,7 +118,8 @@ jobs:
       - name: Smoke-test the image
         run: >
           docker run --rm --entrypoint python discstakka-web:ci
-          -c "import app, discstakka.config, discstakka.catalog.db, discstakka.flows"
+          -c "import app, discstakka.config, discstakka.catalog.db, discstakka.flows,
+          discstakka.simulator"
 
       # No further run step: docker-entrypoint.sh's preflight needs the device
       # nodes and the cgroup rule that docker-compose.yml provisions, and no CI

@@ -14,7 +14,10 @@ You are the other half of the machine. Type a key and press return:
     s   print the unit's state
     q   quit
 
-Usage: python tools/fakerun.py [--port N] [--keep DIR]
+Usage: python tools/fakerun.py [--port N] [--host H] [--keep DIR]
+
+Binds to localhost by default. --host 0.0.0.0 is what you want inside a
+container, or to show the fake to a PS3 on the LAN.
 """
 
 import os
@@ -29,8 +32,7 @@ import app as app_module
 from discstakka import device, protocol
 from discstakka.catalog import db
 from discstakka.config import Config
-from tests.clock import RealClock
-from tests.fake_device import SimulatedTransport
+from discstakka.simulator import SimulatedTransport
 
 SEED = [
     (1, "Shadow of the Colossus", "Team Ico", "Video games", "PlayStation 2"),
@@ -89,6 +91,7 @@ def console(unit, transport):
 
 def main(argv):
     port = int(argv[argv.index("--port") + 1]) if "--port" in argv else 5051
+    host = argv[argv.index("--host") + 1] if "--host" in argv else "127.0.0.1"
     keep = argv[argv.index("--keep") + 1] if "--keep" in argv else None
 
     data_dir = keep or tempfile.mkdtemp(prefix="discstakka-fake-")
@@ -97,7 +100,7 @@ def main(argv):
     db.init(config.db_path)
     occupied = seed(config.db_path)
 
-    transport = SimulatedTransport(RealClock())
+    transport = SimulatedTransport()
     transport.carousel.occupied |= occupied
     unit = transport.carousel
 
@@ -112,11 +115,11 @@ def main(argv):
     print("\ndata     %s" % data_dir)
     print("serial   %08x   firmware 02.17.0079" % unit.serial)
     print("discs    %s" % ", ".join("%d" % s for s in sorted(occupied)))
-    print("\n  http://127.0.0.1:%d/\n" % port)
+    print("\n  http://%s:%d/\n" % (host, port))
 
     threading.Thread(target=console, args=(unit, transport), daemon=True).start()
     try:
-        created.run(host="127.0.0.1", port=port, threaded=True, debug=False)
+        created.run(host=host, port=port, threaded=True, debug=False)
     finally:
         if keep is None:
             shutil.rmtree(data_dir, ignore_errors=True)

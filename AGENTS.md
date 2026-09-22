@@ -15,6 +15,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `pyproject.toml` | Ruff config and the dev dependency group |
 | `discstakka/config.py` | Where state lives: data dir, db, traces, art, port |
 | `discstakka/transport.py` | The only module that imports `hid` |
+| `discstakka/simulator.py` | The simulated carousel, calibrated from `data/traces` |
 | `discstakka/protocol.py` | HID wire protocol (a port of `discstakka.c`) |
 | `discstakka/slots.py` | `SLOT_MIN`, `SLOT_MAX`, `HOME` |
 | `discstakka/device.py` | The single worker thread that owns the device |
@@ -30,7 +31,6 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `static/enhance.js` | Optional XHR polling. Nothing depends on it |
 | `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
 | `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
-| `tests/fake_device.py` | The simulated carousel, calibrated from `data/traces` |
 | `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
 | `.github/workflows/ci.yml` | Suite, suite-without-hidapi, and the image build |
 | `Dockerfile` | Container image, Linux hosts only |
@@ -71,6 +71,9 @@ python tools/ps3lint.py    # needs the server running
   `data/traces`. If you change its timings or state machine, keep
   `test_the_simulated_run_matches_a_captured_one` passing - it is the only
   thing tying the mock to the real hardware.
+- `simulator.py` transcribes the opcodes and status bits rather than importing
+  them from `protocol.py`. A mock that shares its constants with the code under
+  test cannot disagree with it. Keep it that way.
 - Nothing above `discstakka/transport.py` may import `hid`. The `no-hidapi` CI
   job exists to catch that.
 - **Do not trigger hardware actions without asking.** That covers eject,
