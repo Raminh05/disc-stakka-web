@@ -1,20 +1,58 @@
+# The Dockerfile copies named files and whole directories, so anything left in
+# catalog/, discstakka/, static/ or tools/ ships unless it is excluded here.
+
+# -- Never belongs in an image --------------------------------------------
+.git
+.github
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+
 # The venvs hold macOS-specific binaries, including a darwin build of hid.so.
 .venv
-.venv-py39
+.venv-*
+venv
+env
+.direnv
+
 __pycache__
 **/__pycache__
-.DS_Store
+*.py[cod]
+*.egg-info
 
-# The live catalogue and cover art arrive as bind mounts, never as image layers.
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tox
+.coverage
+htmlcov
+requirements-nohid.txt
+
+# nix build symlinks, from flake.nix
+result
+result-*
+
+.DS_Store
+._*
+.idea
+.vscode
+*.swp
+*~
+
+# -- Arrives as a bind mount, never as an image layer ----------------------
+# docker-compose.yml mounts both. Baking them in would shadow the mount on
+# first boot and ship the user's catalogue and cover art inside the image.
 data
 static/art
 
-# Host-side or macOS-only files.
+# -- Host-side only --------------------------------------------------------
 deploy
 flake.nix
 *.md
 
-# The simulated carousel and its runner are development tools, and fakerun.py
-# imports from tests/, which is not in the image.
+# -- Development tools -----------------------------------------------------
+# fakerun.py imports the simulated carousel from tests/, which does not ship,
+# so leaving it in would put a module in the image that cannot be imported.
 tests
 tools/fakerun.py
