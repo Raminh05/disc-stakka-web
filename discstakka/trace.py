@@ -22,8 +22,9 @@ class Trace(object):
 
     def status(self, st):
         if st != self.last:
-            self.fh.write("%7.2fs  %s\n"
-                          % (time.monotonic() - self.t0, describe_status(st)))
+            self.fh.write(
+                "%7.2fs  %s\n" % (time.monotonic() - self.t0, describe_status(st))
+            )
             self.fh.flush()
             self.last = st
 

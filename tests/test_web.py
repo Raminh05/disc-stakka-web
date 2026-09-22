@@ -11,9 +11,9 @@ import tempfile
 import unittest
 
 import app as app_module
+from discstakka import device, protocol
 from discstakka.catalog import db
 from discstakka.config import Config
-from discstakka import device, protocol
 from tests import fake_device as fake
 from tests.clock import RealClock
 
@@ -32,7 +32,8 @@ class WebTest(unittest.TestCase):
 
         config = Config(data_dir=self.tmp)
         self.controller = device.DeviceController(
-            ds=self.ds, db_path=config.db_path, trace_dir=config.trace_dir)
+            ds=self.ds, db_path=config.db_path, trace_dir=config.trace_dir
+        )
         self.app = app_module.create_app(config, self.controller)
         self.app.config["TESTING"] = True
         self.client = self.app.test_client()
@@ -90,10 +91,12 @@ class Pages(WebTest):
 class Methods(WebTest):
     def test_state_changing_routes_refuse_get(self):
         disc_id = self.disc()
-        for path in ("/disc/%d/eject" % disc_id,
-                     "/disc/%d/return" % disc_id,
-                     "/device/reset",
-                     "/device/reconnect"):
+        for path in (
+            "/disc/%d/eject" % disc_id,
+            "/disc/%d/return" % disc_id,
+            "/device/reset",
+            "/device/reconnect",
+        ):
             self.assertEqual(self.client.get(path).status_code, 405, path)
 
 
@@ -105,26 +108,32 @@ class Jobs(WebTest):
 
     def test_eject_redirects_with_303(self):
         response = self.client.post("/disc/%d/eject" % self.disc_id)
-        self.assertEqual(response.status_code, 303,
-                         "a 302 tells the client to preserve the method")
+        self.assertEqual(
+            response.status_code, 303, "a 302 tells the client to preserve the method"
+        )
         self.assertRegex(response.headers["Location"], r"/job/[\w-]+$")
 
     def test_the_job_page_polls_while_running_and_stops_when_done(self):
         job = self.controller.submit(
-            jobs_stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5))
+            jobs_stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
         try:
             page = self.body("/job/%s" % job.id)
-            self.assertTrue(REFRESH.search(page),
-                            "a running job must keep the page refreshing")
+            self.assertTrue(
+                REFRESH.search(page), "a running job must keep the page refreshing"
+            )
         finally:
             jobs_stub.hold.set()
         _wait(job)
-        self.assertFalse(REFRESH.search(self.body("/job/%s" % job.id)),
-                         "a finished job must stop refreshing")
+        self.assertFalse(
+            REFRESH.search(self.body("/job/%s" % job.id)),
+            "a finished job must stop refreshing",
+        )
 
     def test_a_second_job_bounces_to_the_one_already_running(self):
         job = self.controller.submit(
-            first := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5))
+            first := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
         try:
             response = self.client.post("/disc/%d/eject" % self.disc_id)
             self.assertEqual(response.status_code, 303)
@@ -135,7 +144,8 @@ class Jobs(WebTest):
 
     def test_the_json_view_matches_the_snapshot(self):
         job = self.controller.submit(
-            _Stub(), lambda ds, conn, job, trace: job.succeed("done"))
+            _Stub(), lambda ds, conn, job, trace: job.succeed("done")
+        )
         _wait(job)
         payload = self.client.get("/job/%s.json" % job.id).get_json()
         self.assertEqual(payload["id"], job.id)

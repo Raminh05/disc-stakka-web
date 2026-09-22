@@ -1,0 +1,25 @@
+# Tool configuration only. There is no [project] or [build-system] table: this
+# is an appliance that runs as `python app.py`, not a package anyone installs,
+# and declaring otherwise would be a fiction app.py at the root contradicts.
+# Runtime dependencies live in requirements.txt.
+
+[dependency-groups]
+dev = ["ruff==0.16.8"]
+
+[tool.ruff]
+line-length = 88
+extend-exclude = [".venv", ".venv-py39", "data"]
+
+[tool.ruff.lint]
+# E/W pycodestyle, F pyflakes, I import order, B bugbear.
+#
+# UP (pyupgrade) is deliberately absent and should stay absent. It would rewrite
+# 94 %-format strings into f-strings and strip `(object)` from six class
+# declarations, both of which AGENTS.md requires: this code is read next to a
+# 2005 C++ reference and a PS3 browser, and the house style is part of that.
+select = ["E", "W", "F", "I", "B"]
+
+[tool.ruff.format]
+# Single quotes are not the house style, but neither is reformatting 3500 lines
+# to prove it. Only the quote convention is pinned; the rest is Ruff's default.
+quote-style = "double"

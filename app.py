@@ -12,12 +12,20 @@ Run single-process. See discstakka/device.py for why.
 import math
 import os
 
-from flask import (Flask, abort, flash, redirect, render_template, request,
-                   session, url_for)
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
+from discstakka import device, flows, jobs
 from discstakka.catalog import art, db, taxonomy
 from discstakka.config import Config
-from discstakka import device, flows, jobs
 from discstakka.protocol import DeviceError
 from discstakka.slots import SLOT_MAX, SLOT_MIN
 
@@ -44,8 +52,11 @@ def create_app(cfg=None, ctrl=None):
     os.makedirs(config.data_dir, exist_ok=True)
     app.secret_key = _secret_key(config.secret_key_path)
     db.init(config.db_path)
-    controller = ctrl if ctrl is not None else device.DeviceController(
-        db_path=config.db_path, trace_dir=config.trace_dir)
+    controller = (
+        ctrl
+        if ctrl is not None
+        else device.DeviceController(db_path=config.db_path, trace_dir=config.trace_dir)
+    )
     return app
 
 
@@ -62,6 +73,7 @@ def _secret_key(path):
 
 
 # -- helpers -------------------------------------------------------------
+
 
 def conn():
     return db.connect(config.db_path)
@@ -135,16 +147,25 @@ def index():
     c = conn()
     try:
         total = db.count_discs(c, query or None, status, category, platform)
-        discs = db.list_discs(c, page, per_page, query or None, status, order,
-                              category, platform)
+        discs = db.list_discs(
+            c, page, per_page, query or None, status, order, category, platform
+        )
         return render_template(
-            "catalog.html", discs=discs, page=page,
+            "catalog.html",
+            discs=discs,
+            page=page,
             pages=max(1, int(math.ceil(total / float(per_page)))),
-            total=total, query=query, status=status, order=order,
-            category=category, platform=platform, view=view,
+            total=total,
+            query=query,
+            status=status,
+            order=order,
+            category=category,
+            platform=platform,
+            view=view,
             category_counts=db.category_counts(c),
             platform_counts=db.platform_counts(c),
-            stats=db.stats(c))
+            stats=db.stats(c),
+        )
     finally:
         c.close()
 
@@ -180,14 +201,15 @@ def disc_edit(disc_id):
                 "title": title,
                 "subtitle": (request.form.get("subtitle") or "").strip() or None,
                 "category": category,
-                "platform": taxonomy.platform(category,
-                                              request.form.get("platform")),
+                "platform": taxonomy.platform(category, request.form.get("platform")),
                 "notes": (request.form.get("notes") or "").strip() or None,
             }
             try:
-                stem = art.ingest(request.files.get("art_file"),
-                                  request.form.get("art_url"),
-                                  replacing=disc["art_path"])
+                stem = art.ingest(
+                    request.files.get("art_file"),
+                    request.form.get("art_url"),
+                    replacing=disc["art_path"],
+                )
                 if stem:
                     fields["art_path"] = stem
             except art.ArtError as exc:
@@ -213,26 +235,33 @@ def disc_delete(disc_id):
         # Only the confirmation form's field deletes, so a stray or repeated
         # POST lands on the confirmation page instead.
         if request.method != "POST" or request.form.get("confirm") != "yes":
-            back = (url_for("index") if request.values.get("from") == "list"
-                    else url_for("disc_page", disc_id=disc_id))
+            back = (
+                url_for("index")
+                if request.values.get("from") == "list"
+                else url_for("disc_page", disc_id=disc_id)
+            )
             return render_template("confirm_delete.html", disc=disc, back=back)
         db.delete_disc(c, disc_id)
         art.remove(disc["art_path"])
         if disc["status"] == db.OUT:
-            detail = ("It was checked out, so slot %d is no longer held for "
-                      "its return." % disc["slot"])
+            detail = (
+                "It was checked out, so slot %d is no longer held for "
+                "its return." % disc["slot"]
+            )
         else:
-            detail = ("Nothing was ejected, so anything physically in slot %d "
-                      "is still there, but the catalogue now lists the slot "
-                      "as free." % disc["slot"])
-        flash("Removed “%s” from the catalogue. %s" % (disc["title"], detail),
-              "warn")
+            detail = (
+                "Nothing was ejected, so anything physically in slot %d "
+                "is still there, but the catalogue now lists the slot "
+                "as free." % disc["slot"]
+            )
+        flash("Removed “%s” from the catalogue. %s" % (disc["title"], detail), "warn")
         return see_other(url_for("index"))
     finally:
         c.close()
 
 
 # -- hardware ------------------------------------------------------------
+
 
 @app.route("/disc/<int:disc_id>/eject", methods=["POST"])
 def disc_eject(disc_id):
@@ -244,8 +273,12 @@ def disc_eject(disc_id):
         if disc["status"] == db.OUT:
             flash("That disc is already checked out.", "warn")
             return see_other(url_for("disc_page", disc_id=disc_id))
-        job = jobs.Job("eject", "Eject %s (slot %d)" % (disc["title"], disc["slot"]),
-                       disc_id=disc_id, slot=disc["slot"])
+        job = jobs.Job(
+            "eject",
+            "Eject %s (slot %d)" % (disc["title"], disc["slot"]),
+            disc_id=disc_id,
+            slot=disc["slot"],
+        )
     finally:
         c.close()
     return start_job(job, flows.run_eject, disc_id)
@@ -261,9 +294,12 @@ def disc_return(disc_id):
         if disc["status"] != db.OUT:
             flash("That disc is not checked out.", "warn")
             return see_other(url_for("disc_page", disc_id=disc_id))
-        job = jobs.Job("return", "Return %s to slot %d"
-                       % (disc["title"], disc["slot"]),
-                       disc_id=disc_id, slot=disc["slot"])
+        job = jobs.Job(
+            "return",
+            "Return %s to slot %d" % (disc["title"], disc["slot"]),
+            disc_id=disc_id,
+            slot=disc["slot"],
+        )
     finally:
         c.close()
     return start_job(job, flows.run_add, disc["slot"], disc_id)
@@ -288,8 +324,9 @@ def add():
             job = jobs.Job("add", "Load a disc into slot %d" % slot, slot=slot)
             return start_job(job, flows.run_add, slot)
 
-        return render_template("add.html", free=db.free_slots(c),
-                               suggested=db.next_free_slot(c))
+        return render_template(
+            "add.html", free=db.free_slots(c), suggested=db.next_free_slot(c)
+        )
     finally:
         c.close()
 
@@ -317,8 +354,7 @@ def device_page():
         events = db.recent_events(c, 25)
     finally:
         c.close()
-    return render_template("device.html", probe=result, error=error,
-                           events=events)
+    return render_template("device.html", probe=result, error=error, events=events)
 
 
 @app.route("/device/reconnect", methods=["POST"])
@@ -345,6 +381,7 @@ def device_reset():
 
 
 # -- reconcile -----------------------------------------------------------
+
 
 @app.route("/reconcile", methods=["GET", "POST"])
 def reconcile():
@@ -388,6 +425,7 @@ def reconcile_manual():
 
 # -- optional JSON, only for enhance.js on modern browsers ---------------
 
+
 @app.route("/job/<job_id>.json")
 def job_json(job_id):
     job = controller.registry.get(job_id)
@@ -398,14 +436,14 @@ def job_json(job_id):
 
 @app.errorhandler(404)
 def not_found(_exc):
-    return render_template("error.html", code=404,
-                           message="No such page."), 404
+    return render_template("error.html", code=404, message="No such page."), 404
 
 
 @app.errorhandler(413)
 def too_large(_exc):
-    return render_template("error.html", code=413,
-                           message="That upload is too large."), 413
+    return render_template(
+        "error.html", code=413, message="That upload is too large."
+    ), 413
 
 
 if __name__ == "__main__":

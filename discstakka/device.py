@@ -17,7 +17,7 @@ import traceback
 
 from . import jobs
 from .catalog import db
-from .protocol import DiscStakka, DeviceError, NotConnected, describe_status
+from .protocol import DeviceError, DiscStakka, NotConnected, describe_status
 from .trace import NullTrace, Trace
 
 
@@ -94,7 +94,8 @@ class DeviceController(object):
             self._current = job
         self.registry.add(job)
         thread = threading.Thread(
-            target=self._run, args=(job, runner, args), daemon=True)
+            target=self._run, args=(job, runner, args), daemon=True
+        )
         thread.start()
         return job
 

@@ -42,6 +42,7 @@ class ArtError(Exception):
 
 # -- fetching ------------------------------------------------------------
 
+
 def _check_public(host):
     """Reject anything resolving to a non-public address.
 
@@ -55,16 +56,23 @@ def _check_public(host):
     """
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror:
-        raise ArtError("Could not resolve %s" % host)
+    except socket.gaierror as exc:
+        raise ArtError("Could not resolve %s" % host) from exc
 
     for info in infos:
         addr = ipaddress.ip_address(info[4][0])
-        if (addr.is_private or addr.is_loopback or addr.is_link_local
-                or addr.is_reserved or addr.is_multicast or addr.is_unspecified):
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
             raise ArtError(
                 "That URL points at a private or local address (%s), which "
-                "this server will not fetch." % addr)
+                "this server will not fetch." % addr
+            )
 
 
 def fetch_url(url):
@@ -78,9 +86,13 @@ def fetch_url(url):
             raise ArtError("That does not look like a URL.")
         _check_public(parsed.hostname)
 
-        resp = requests.get(url, stream=True, timeout=FETCH_TIMEOUT,
-                            allow_redirects=False,
-                            headers={"User-Agent": "discstakka-web/1.0"})
+        resp = requests.get(
+            url,
+            stream=True,
+            timeout=FETCH_TIMEOUT,
+            allow_redirects=False,
+            headers={"User-Agent": "discstakka-web/1.0"},
+        )
 
         if resp.is_redirect or resp.is_permanent_redirect:
             seen += 1
@@ -97,16 +109,18 @@ def fetch_url(url):
 
         ctype = resp.headers.get("Content-Type", "").split(";")[0].strip()
         if not ctype.startswith("image/"):
-            raise ArtError("That URL is %s, not an image."
-                           % (ctype or "an unknown type"))
+            raise ArtError(
+                "That URL is %s, not an image." % (ctype or "an unknown type")
+            )
 
         data = bytearray()
         for chunk in resp.iter_content(64 * 1024):
             data.extend(chunk)
             if len(data) > MAX_BYTES:
                 resp.close()
-                raise ArtError("That image is larger than %d MB."
-                               % (MAX_BYTES // (1024 * 1024)))
+                raise ArtError(
+                    "That image is larger than %d MB." % (MAX_BYTES // (1024 * 1024))
+                )
         resp.close()
         if not data:
             raise ArtError("That URL returned an empty response.")
@@ -114,6 +128,7 @@ def fetch_url(url):
 
 
 # -- rendering -----------------------------------------------------------
+
 
 def _flatten(img):
     """RGB on white. JPEG has no alpha, and a black fill looks broken."""
@@ -135,8 +150,8 @@ def store(data, stem=None):
     try:
         img = Image.open(io.BytesIO(data))
         img.load()
-    except Exception:
-        raise ArtError("That file is not an image this server can read.")
+    except Exception as exc:
+        raise ArtError("That file is not an image this server can read.") from exc
 
     img = _flatten(img)
     os.makedirs(ART_DIR, exist_ok=True)
@@ -146,8 +161,13 @@ def store(data, stem=None):
         copy = img.copy()
         copy.thumbnail((px, px), Image.LANCZOS)
         # No exif= argument, so metadata is dropped on the way out.
-        copy.save(os.path.join(ART_DIR, "%s_%s.jpg" % (stem, suffix)),
-                  "JPEG", quality=JPEG_QUALITY, optimize=True, progressive=False)
+        copy.save(
+            os.path.join(ART_DIR, "%s_%s.jpg" % (stem, suffix)),
+            "JPEG",
+            quality=JPEG_QUALITY,
+            optimize=True,
+            progressive=False,
+        )
     return stem
 
 
@@ -172,8 +192,9 @@ def ingest(upload=None, url=None, replacing=None):
     if upload is not None and getattr(upload, "filename", ""):
         data = upload.read(MAX_BYTES + 1)
         if len(data) > MAX_BYTES:
-            raise ArtError("That file is larger than %d MB."
-                           % (MAX_BYTES // (1024 * 1024)))
+            raise ArtError(
+                "That file is larger than %d MB." % (MAX_BYTES // (1024 * 1024))
+            )
     elif url:
         data = fetch_url(url.strip())
 

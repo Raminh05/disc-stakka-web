@@ -69,8 +69,9 @@ def _migrate(conn):
         conn.execute("ALTER TABLE disc ADD COLUMN category TEXT")
         conn.execute("ALTER TABLE disc ADD COLUMN platform TEXT")
         if "media_type" in cols:
-            conn.execute("UPDATE disc SET category = ? WHERE media_type = 'Data'",
-                         ("Software",))
+            conn.execute(
+                "UPDATE disc SET category = ? WHERE media_type = 'Data'", ("Software",)
+            )
             try:
                 conn.execute("ALTER TABLE disc DROP COLUMN media_type")
             except sqlite3.OperationalError:
@@ -79,13 +80,16 @@ def _migrate(conn):
 
 # -- reads ---------------------------------------------------------------
 
+
 def _where(query=None, status=None, category=None, platform=None):
     """The WHERE tail shared by the catalogue page and its total, so the count
     above a filtered page can never describe a different set than the page."""
     sql, args = "", []
     if query:
-        sql += (" AND (title LIKE ? OR subtitle LIKE ? OR notes LIKE ?"
-                " OR category LIKE ? OR platform LIKE ?)")
+        sql += (
+            " AND (title LIKE ? OR subtitle LIKE ? OR notes LIKE ?"
+            " OR category LIKE ? OR platform LIKE ?)"
+        )
         args += ["%%%s%%" % query] * 5
     if status:
         sql += " AND status = ?"
@@ -101,12 +105,21 @@ def _where(query=None, status=None, category=None, platform=None):
 
 def count_discs(conn, query=None, status=None, category=None, platform=None):
     where, args = _where(query, status, category, platform)
-    return conn.execute(
-        "SELECT COUNT(*) FROM disc WHERE 1=1" + where, args).fetchone()[0]
+    return conn.execute("SELECT COUNT(*) FROM disc WHERE 1=1" + where, args).fetchone()[
+        0
+    ]
 
 
-def list_discs(conn, page=1, per_page=PER_PAGE, query=None, status=None,
-               order="slot", category=None, platform=None):
+def list_discs(
+    conn,
+    page=1,
+    per_page=PER_PAGE,
+    query=None,
+    status=None,
+    order="slot",
+    category=None,
+    platform=None,
+):
     where, args = _where(query, status, category, platform)
     sql = "SELECT * FROM disc WHERE 1=1" + where
     sql += " ORDER BY %s" % ("title COLLATE NOCASE" if order == "title" else "slot")
@@ -144,57 +157,89 @@ def free_slots(conn):
 def recent_events(conn, limit=50):
     return conn.execute(
         "SELECT e.*, d.title FROM event e LEFT JOIN disc d ON d.id = e.disc_id"
-        " ORDER BY e.at DESC, e.id DESC LIMIT ?", (limit,)).fetchall()
+        " ORDER BY e.at DESC, e.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
 
 
 def category_counts(conn):
     """How many discs in each category, for the filter bar. Unclassified discs
     are counted by nothing, so they appear only under "All"."""
-    return {row["category"]: row["n"] for row in conn.execute(
-        "SELECT category, COUNT(*) AS n FROM disc"
-        " WHERE category IS NOT NULL GROUP BY category")}
+    return {
+        row["category"]: row["n"]
+        for row in conn.execute(
+            "SELECT category, COUNT(*) AS n FROM disc"
+            " WHERE category IS NOT NULL GROUP BY category"
+        )
+    }
 
 
 def platform_counts(conn):
     """Same, per console, within the games. Drives the second filter row."""
-    return {row["platform"]: row["n"] for row in conn.execute(
-        "SELECT platform, COUNT(*) AS n FROM disc"
-        " WHERE category = ? AND platform IS NOT NULL GROUP BY platform",
-        (taxonomy.GAMES,))}
+    return {
+        row["platform"]: row["n"]
+        for row in conn.execute(
+            "SELECT platform, COUNT(*) AS n FROM disc"
+            " WHERE category = ? AND platform IS NOT NULL GROUP BY platform",
+            (taxonomy.GAMES,),
+        )
+    }
 
 
 def stats(conn):
     total = conn.execute("SELECT COUNT(*) FROM disc").fetchone()[0]
-    out = conn.execute(
-        "SELECT COUNT(*) FROM disc WHERE status = ?", (OUT,)).fetchone()[0]
+    out = conn.execute("SELECT COUNT(*) FROM disc WHERE status = ?", (OUT,)).fetchone()[
+        0
+    ]
     return {"total": total, "out": out, "free": SLOT_MAX - total}
 
 
 # -- writes --------------------------------------------------------------
 
+
 def log_event(conn, kind, disc_id=None, slot=None, detail=None):
     conn.execute(
         "INSERT INTO event (disc_id, slot, kind, detail, at) VALUES (?,?,?,?,?)",
-        (disc_id, slot, kind, detail, _now()))
+        (disc_id, slot, kind, detail, _now()),
+    )
 
 
-def create_disc(conn, slot, title, subtitle=None, category=None, platform=None,
-                notes=None, art_path=None, kind="added"):
+def create_disc(
+    conn,
+    slot,
+    title,
+    subtitle=None,
+    category=None,
+    platform=None,
+    notes=None,
+    art_path=None,
+    kind="added",
+):
     now = _now()
     with conn:
         cur = conn.execute(
             "INSERT INTO disc (slot, title, subtitle, category, platform, notes,"
             " art_path, status, created_at, updated_at)"
             " VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (slot, title, subtitle, category, platform, notes, art_path, STORED,
-             now, now))
+            (
+                slot,
+                title,
+                subtitle,
+                category,
+                platform,
+                notes,
+                art_path,
+                STORED,
+                now,
+                now,
+            ),
+        )
         log_event(conn, kind, cur.lastrowid, slot, title)
     return cur.lastrowid
 
 
 def update_disc(conn, disc_id, **fields):
-    allowed = ("title", "subtitle", "category", "platform", "notes", "art_path",
-               "slot")
+    allowed = ("title", "subtitle", "category", "platform", "notes", "art_path", "slot")
     sets, args = [], []
     for key in allowed:
         if key in fields:
@@ -213,7 +258,9 @@ def mark_out(conn, disc_id):
     with conn:
         conn.execute(
             "UPDATE disc SET status = ?, checked_out_at = ?, updated_at = ?"
-            " WHERE id = ?", (OUT, now, now, disc_id))
+            " WHERE id = ?",
+            (OUT, now, now, disc_id),
+        )
         row = get_disc(conn, disc_id)
         log_event(conn, "ejected", disc_id, row["slot"] if row else None)
 
@@ -223,7 +270,9 @@ def mark_stored(conn, disc_id, kind="returned"):
     with conn:
         conn.execute(
             "UPDATE disc SET status = ?, checked_out_at = NULL, updated_at = ?"
-            " WHERE id = ?", (STORED, now, disc_id))
+            " WHERE id = ?",
+            (STORED, now, disc_id),
+        )
         row = get_disc(conn, disc_id)
         log_event(conn, kind, disc_id, row["slot"] if row else None)
 
@@ -232,6 +281,11 @@ def delete_disc(conn, disc_id):
     row = get_disc(conn, disc_id)
     with conn:
         conn.execute("DELETE FROM disc WHERE id = ?", (disc_id,))
-        log_event(conn, "removed", None, row["slot"] if row else None,
-                  row["title"] if row else None)
+        log_event(
+            conn,
+            "removed",
+            None,
+            row["slot"] if row else None,
+            row["title"] if row else None,
+        )
     return row

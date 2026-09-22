@@ -14,6 +14,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lint:
+    name: Ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      # Ruff is a development tool, so it lives in the pyproject dependency
+      # group rather than in requirements.txt. No runtime deps needed to lint.
+      - name: Install Ruff
+        run: pip install --group dev
+
+      - run: ruff check .
+      - run: ruff format --check .
+
   tests:
     name: Test suite
     runs-on: ubuntu-latest
@@ -43,7 +63,7 @@ jobs:
       # test_ps3lint.py boots the simulated server and runs tools/ps3lint.py
       # against it, so the markup and CSS 2.1 rules are covered here as well.
       - name: Run tests
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -t . -v
 
   no-hidapi:
     name: Suite runs without hidapi
@@ -74,7 +94,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: python -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -t . -v
 
   container:
     name: Container image

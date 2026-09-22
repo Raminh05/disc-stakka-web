@@ -21,12 +21,19 @@ PAGES = ["/", "/add", "/reconcile", "/device"]
 # (pattern, why it matters). Checked against served HTML.
 HTML_RULES = [
     (r"<button\b", "<button> is unreliable in NetFront; use <input type=submit>"),
-    (r"\bon(click|change|submit|load)\s*=", "inline JS handlers; actions must be form POSTs"),
+    (
+        r"\bon(click|change|submit|load)\s*=",
+        "inline JS handlers; actions must be form POSTs",
+    ),
     (r"<meta\s+charset=", "bare <meta charset> shorthand; needs the http-equiv form"),
-    (r"<(section|article|nav|aside|figure|details|summary)\b",
-     "HTML5 sectioning element predating NetFront"),
-    (r"\btype=\"(email|date|number|range|color|search)\"",
-     "HTML5 input type; falls back inconsistently"),
+    (
+        r"<(section|article|nav|aside|figure|details|summary)\b",
+        "HTML5 sectioning element predating NetFront",
+    ),
+    (
+        r"\btype=\"(email|date|number|range|color|search)\"",
+        "HTML5 input type; falls back inconsistently",
+    ),
     (r"<(canvas|svg|video|audio)\b", "not renderable on the PS3"),
     (r"\.webp\b", "PS3 cannot decode WebP"),
 ]
@@ -55,9 +62,8 @@ def check_html(base):
             bad += 1
             continue
 
-        problems = [why for pat, why in HTML_RULES
-                    if re.search(pat, body, re.I)]
-        if "http-equiv=\"Content-Type\"" not in body:
+        problems = [why for pat, why in HTML_RULES if re.search(pat, body, re.I)]
+        if 'http-equiv="Content-Type"' not in body:
             problems.append("missing http-equiv Content-Type meta")
         if problems:
             bad += 1

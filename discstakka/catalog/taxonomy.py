@@ -19,11 +19,22 @@ CATEGORIES = [GAMES, "Music", "Movies", "Software", "Other"]
 # Disc-based systems only: a cartridge console can never turn up in a disc
 # carousel. "PC" and "Mac" cover CD/DVD-ROM releases.
 PLATFORMS = [
-    "PC", "Mac",
-    "PS1", "PS2", "PS3", "PS4", "PS5",
-    "Xbox", "Xbox 360", "Xbox One", "Xbox Series",
-    "Wii", "Wii U", "GameCube",
-    "Dreamcast", "Saturn",
+    "PC",
+    "Mac",
+    "PS1",
+    "PS2",
+    "PS3",
+    "PS4",
+    "PS5",
+    "Xbox",
+    "Xbox 360",
+    "Xbox One",
+    "Xbox Series",
+    "Wii",
+    "Wii U",
+    "GameCube",
+    "Dreamcast",
+    "Saturn",
     "Other",
 ]
 

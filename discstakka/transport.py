@@ -36,7 +36,7 @@ class HidTransport(object):
         try:
             import hid
         except ImportError as exc:
-            raise OSError("hidapi is not installed: %s" % exc)
+            raise OSError("hidapi is not installed: %s" % exc) from exc
 
         # Refresh hidapi's device list. After a sleep/wake cycle the cached
         # entry points at a device that no longer exists, and every open on

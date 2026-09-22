@@ -13,9 +13,9 @@ import shutil
 import tempfile
 import unittest
 
-from discstakka.catalog import db
 from discstakka import device, flows, jobs, protocol
 from discstakka import trace as trace_module
+from discstakka.catalog import db
 from discstakka.trace import Trace
 from tests import fake_device as fake
 from tests.clock import virtual_clock
@@ -26,11 +26,13 @@ STATUS_LINE = re.compile(r"^\s*[\d.]+s\s+([0-9a-f]{4}) \[")
 #: Decoded flag names in the order describe_status emits them, minus BUSY and
 #: the undecoded 0x4000. Two runs of the same operation agree on this even when
 #: their timings and blip counts do not.
-SIGNIFICANT = ((protocol.ST_DISC_WAITING, "DISC_WAITING"),
-               (protocol.ST_NEW_DISC_ACK, "NEW_DISC_ACK"),
-               (protocol.ST_DISC_IN_BAY, "DISC_IN_BAY"),
-               (protocol.ST_ACK_TIMEOUT, "ACK_TIMEOUT"),
-               (protocol.ST_HOMED, "HOMED"))
+SIGNIFICANT = (
+    (protocol.ST_DISC_WAITING, "DISC_WAITING"),
+    (protocol.ST_NEW_DISC_ACK, "NEW_DISC_ACK"),
+    (protocol.ST_DISC_IN_BAY, "DISC_IN_BAY"),
+    (protocol.ST_ACK_TIMEOUT, "ACK_TIMEOUT"),
+    (protocol.ST_HOMED, "HOMED"),
+)
 
 
 def signature(path):
@@ -81,8 +83,10 @@ class FlowTest(unittest.TestCase):
         job = jobs.Job(kind, title, **kw)
         job.phases = []
         original = job.set_phase
-        actions = {jobs.AWAITING_INSERT: self.unit.insert_disc,
-                   jobs.PRESENTED: self.unit.take_disc}
+        actions = {
+            jobs.AWAITING_INSERT: self.unit.insert_disc,
+            jobs.PRESENTED: self.unit.take_disc,
+        }
 
         def record(phase, message, window_s=None):
             job.phases.append(phase)
@@ -134,14 +138,17 @@ class Reset(FlowTest):
 
 class Add(FlowTest):
     def test_a_disc_goes_in_and_is_catalogued(self):
-        job = self.job("add", "Load a disc into slot 5", slot=5,
-                       when={jobs.AWAITING_INSERT: 3_000})
+        job = self.job(
+            "add", "Load a disc into slot 5", slot=5, when={jobs.AWAITING_INSERT: 3_000}
+        )
         flows.run_add(self.ds, self.conn, job, job.trace, 5)
 
         snap = job.snapshot()
         self.assertTrue(snap["ok"], snap["message"])
-        self.assertEqual(job.phases, [jobs.MOVING, jobs.AWAITING_INSERT,
-                                      jobs.INGESTING, jobs.PARKING])
+        self.assertEqual(
+            job.phases,
+            [jobs.MOVING, jobs.AWAITING_INSERT, jobs.INGESTING, jobs.PARKING],
+        )
         self.assertIn(5, self.unit.occupied)
         self.assertEqual(self.unit.position, protocol.HOME)
 
@@ -164,8 +171,9 @@ class Add(FlowTest):
     def test_the_accept_command_is_never_sent_while_the_unit_is_busy(self):
         # Sent early it is silently dropped, the firmware times out waiting to
         # be told what to do, and the disc comes back out.
-        job = self.job("add", "Load a disc into slot 2", slot=2,
-                       when={jobs.AWAITING_INSERT: 2_000})
+        job = self.job(
+            "add", "Load a disc into slot 2", slot=2, when={jobs.AWAITING_INSERT: 2_000}
+        )
 
         busy_at_accept = []
         real_handle = self.unit.handle
@@ -180,27 +188,37 @@ class Add(FlowTest):
 
         self.assertTrue(job.snapshot()["ok"])
         self.assertTrue(busy_at_accept, "0x1D was never sent")
-        self.assertFalse(any(busy_at_accept),
-                         "0x1D was sent mid-motion; the disc would be spat back out")
+        self.assertFalse(
+            any(busy_at_accept),
+            "0x1D was sent mid-motion; the disc would be spat back out",
+        )
 
     def test_accepting_too_early_makes_the_unit_spit_the_disc_out(self):
         # The failure the settle wait prevents, forced at protocol level.
         self.ds.move_to(4)
         self.unit.insert_disc()
         self.assertTrue(self.ds.wait_for_insert())
-        self.assertIsNone(self.ds.command(fake.CMD_ACCEPT_DISC),
-                          "0x1D was heard mid-motion; it should have been dropped")
+        self.assertIsNone(
+            self.ds.command(fake.CMD_ACCEPT_DISC),
+            "0x1D was heard mid-motion; it should have been dropped",
+        )
 
-        self.assertTrue(self.ds.wait_state(protocol.ST_ACK_TIMEOUT,
-                                           protocol.ST_ACK_TIMEOUT, 30_000))
+        self.assertTrue(
+            self.ds.wait_state(protocol.ST_ACK_TIMEOUT, protocol.ST_ACK_TIMEOUT, 30_000)
+        )
         self.assertTrue(self.ds.disc_in_bay())
         self.assertNotIn(4, self.unit.occupied)
 
     def test_a_return_restores_the_disc_to_its_reserved_slot(self):
         disc_id = self.disc(12, "Ico")
         db.mark_out(self.conn, disc_id)
-        job = self.job("return", "Return Ico to slot 12", disc_id=disc_id, slot=12,
-                       when={jobs.AWAITING_INSERT: 2_000})
+        job = self.job(
+            "return",
+            "Return Ico to slot 12",
+            disc_id=disc_id,
+            slot=12,
+            when={jobs.AWAITING_INSERT: 2_000},
+        )
         flows.run_add(self.ds, self.conn, job, job.trace, 12, disc_id)
 
         snap = job.snapshot()
@@ -210,22 +228,29 @@ class Add(FlowTest):
         self.assertIn("returned", [k for k, _ in self.events()])
 
     def test_the_run_is_traced(self):
-        job = self.job("add", "Load a disc into slot 1", slot=1,
-                       when={jobs.AWAITING_INSERT: 2_000})
+        job = self.job(
+            "add", "Load a disc into slot 1", slot=1, when={jobs.AWAITING_INSERT: 2_000}
+        )
         flows.run_add(self.ds, self.conn, job, job.trace, 1)
 
         with open(self.only_trace()) as fh:
             body = fh.read()
         # "end" is the controller's, not the flow's; see ControllerTest.
-        for marker in ("move to slot 1", "awaiting insert", "disc seen",
-                       "0x1D acknowledged", "parked"):
+        for marker in (
+            "move to slot 1",
+            "awaiting insert",
+            "disc seen",
+            "0x1D acknowledged",
+            "parked",
+        ):
             self.assertIn(marker, body)
 
     def test_the_simulated_run_matches_a_captured_one(self):
         # 23 of the 25 traces in data/traces share this signature. If the
         # simulator drifts from the hardware, this is what notices.
-        job = self.job("add", "Load a disc into slot 4", slot=4,
-                       when={jobs.AWAITING_INSERT: 4_000})
+        job = self.job(
+            "add", "Load a disc into slot 4", slot=4, when={jobs.AWAITING_INSERT: 4_000}
+        )
         flows.run_add(self.ds, self.conn, job, job.trace, 4)
 
         captured = signature(os.path.join(FIXTURES, "add-1789349798-4.log"))
@@ -239,8 +264,13 @@ class Eject(FlowTest):
         self.unit.occupied.add(18)
 
     def test_a_disc_is_presented_and_taken(self):
-        job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18,
-                       when={jobs.PRESENTED: 1_500})
+        job = self.job(
+            "eject",
+            "Eject slot 18",
+            disc_id=self.disc_id,
+            slot=18,
+            when={jobs.PRESENTED: 1_500},
+        )
         flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
         snap = job.snapshot()
@@ -265,7 +295,8 @@ class Eject(FlowTest):
 
     def test_a_disc_left_in_the_bay_is_put_back(self):
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
-        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)  # nobody takes it
+        # Nobody takes it.
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
@@ -284,18 +315,25 @@ class Eject(FlowTest):
 
 class ControllerTest(FlowTest):
     def controller(self):
-        return device.DeviceController(ds=self.ds, db_path=self.db_path,
-                                       trace_dir=self.traces)
+        return device.DeviceController(
+            ds=self.ds, db_path=self.db_path, trace_dir=self.traces
+        )
 
     def test_one_job_at_a_time(self):
         control = self.controller()
         first = jobs.Job("reset", "Reset the unit")
-        control.submit(first, lambda ds, conn, job, trace: job.succeed("done")
-                       if self.block.wait(5) else None)
+        control.submit(
+            first,
+            lambda ds, conn, job, trace: (
+                job.succeed("done") if self.block.wait(5) else None
+            ),
+        )
         try:
             with self.assertRaises(device.Busy) as caught:
-                control.submit(jobs.Job("reset", "Reset again"),
-                               lambda ds, conn, job, trace: job.succeed("done"))
+                control.submit(
+                    jobs.Job("reset", "Reset again"),
+                    lambda ds, conn, job, trace: job.succeed("done"),
+                )
             self.assertIs(caught.exception.job, first)
         finally:
             self.block.set()
@@ -342,10 +380,12 @@ class ControllerTest(FlowTest):
     def setUp(self):
         FlowTest.setUp(self)
         import threading
+
         self.block = threading.Event()
 
     def wait_for(self, job, timeout=5.0):
         import time as real_time
+
         deadline = real_time.monotonic() + timeout
         while real_time.monotonic() < deadline:
             if job.done:

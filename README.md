@@ -15,7 +15,7 @@ virtual environment and install the dependencies once:
 
 ```sh
 python3.14 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 ```
 
 Then either join the environment and run the app:
@@ -199,17 +199,21 @@ move after one will home the carousel first. That is automatic.
 
 | Path | What |
 |---|---|
+| `app.py` | Routes and `create_app()`; stays at the root so Flask finds `templates/` |
 | `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/protocol.py` | HID protocol, ported from `discstakka.c` |
 | `discstakka/device.py` | Single worker thread owning the device |
 | `discstakka/flows.py` | The eject, add and reset flows |
 | `discstakka/jobs.py` | Job phases and registry |
 | `discstakka/trace.py` | Per-job record of what the unit reported |
-| `config.py` | Data directory, database, traces, secret key, port |
-| `catalog/db.py` | SQLite catalogue |
-| `catalog/taxonomy.py` | The categories, and the console list for games |
-| `catalog/art.py` | Cover art ingest (upload + URL), with SSRF guards |
+| `discstakka/config.py` | Data directory, database, traces, art, secret key, port |
+| `discstakka/catalog/db.py` | SQLite catalogue |
+| `discstakka/catalog/schema.sql` | Schema, read as package data |
+| `discstakka/catalog/taxonomy.py` | The categories, and the console list for games |
+| `discstakka/catalog/art.py` | Cover art ingest (upload + URL), with SSRF guards |
 | `templates/job.html` | The meta-refresh polling page |
+
+`app` and `discstakka` are the only names this project puts on `sys.path`.
 
 ## Testing without a carousel
 
@@ -220,8 +224,15 @@ and one test checks that a simulated load still produces the same status
 signature as a recorded one.
 
 ```sh
-python -m unittest discover -s tests   # ~3 s, no hardware, no network
-python tools/fakerun.py                # the app, browsable, with a fake unit
+python -m unittest discover -s tests -t .   # ~3 s, no hardware, no network
+python tools/fakerun.py                     # the app, browsable, with a fake unit
+```
+
+Linting is Ruff, configured in `pyproject.toml` and installed with
+`pip install --group dev`:
+
+```sh
+ruff check . && ruff format --check .
 ```
 
 `fakerun.py` gives you the physical half on stdin: `i` to insert a disc, `t` to
@@ -300,6 +311,12 @@ whole reason `ingest()` waits before sending `0x1D`.
 What this project adds is a catalogue, a web interface old browsers can use,
 and the four rules under *Protocol notes worth keeping*, which are not in the
 2005 sources.
+
+## Licence
+
+GPL-2.0-or-later, in `LICENSE`. This is a port of Eddie Cornejo's GPLv2 work
+(see [Prior work](#prior-work)), so it inherits that licence rather than
+choosing one.
 
 ## Keeping the catalogue honest
 

@@ -26,9 +26,9 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module
+from discstakka import device, protocol
 from discstakka.catalog import db
 from discstakka.config import Config
-from discstakka import device, protocol
 from tests.clock import RealClock
 from tests.fake_device import SimulatedTransport
 
@@ -44,8 +44,14 @@ def seed(path):
     conn = db.connect(path)
     try:
         for slot, title, subtitle, category, platform in SEED:
-            db.create_disc(conn, slot, title, subtitle=subtitle,
-                           category=category, platform=platform)
+            db.create_disc(
+                conn,
+                slot,
+                title,
+                subtitle=subtitle,
+                category=category,
+                platform=platform,
+            )
     finally:
         conn.close()
     return {slot for slot, _, _, _, _ in SEED}
@@ -57,10 +63,16 @@ def console(unit, transport):
         "t": lambda: (unit.take_disc(), "disc taken from the bay"),
         "u": lambda: (transport.unplug(), "unplugged"),
         "r": lambda: (transport.replug(), "plugged back in"),
-        "s": lambda: (None, "position %d  homed=%s  occupied=%s  %s"
-                            % (unit.position, unit.homed,
-                               sorted(unit.occupied),
-                               protocol.describe_status(unit.status()))),
+        "s": lambda: (
+            None,
+            "position %d  homed=%s  occupied=%s  %s"
+            % (
+                unit.position,
+                unit.homed,
+                sorted(unit.occupied),
+                protocol.describe_status(unit.status()),
+            ),
+        ),
     }
     for line in sys.stdin:
         key = line.strip().lower()[:1]
@@ -90,8 +102,10 @@ def main(argv):
     unit = transport.carousel
 
     controller = device.DeviceController(
-        ds=protocol.DiscStakka(transport), db_path=config.db_path,
-        trace_dir=config.trace_dir)
+        ds=protocol.DiscStakka(transport),
+        db_path=config.db_path,
+        trace_dir=config.trace_dir,
+    )
     created = app_module.create_app(config, controller)
 
     print(__doc__.split("Usage:")[0].strip())

@@ -8,6 +8,7 @@ hardware without moving a real carousel.
 import unittest
 
 from discstakka import protocol
+from discstakka.slots import SLOT_MAX, SLOT_MIN
 from tests import fake_device as fake
 from tests.clock import virtual_clock
 
@@ -51,8 +52,7 @@ class Handshake(ProtocolTest):
 
         def open_without_announcement():
             original()
-            self.io._latched = self.io._packet(
-                7, fake.CMD_REQUEST_STATE, (0, 0, 0, 0))
+            self.io._latched = self.io._packet(7, fake.CMD_REQUEST_STATE, (0, 0, 0, 0))
 
         self.io.open = open_without_announcement
         self.ds.open()
@@ -76,8 +76,7 @@ class MessageIdPairing(ProtocolTest):
 
     def test_message_id_wraps_at_255(self):
         self.opened()
-        self.io._latched = self.io._packet(
-            0xFF, fake.CMD_REQUEST_STATE, (0, 0, 0, 0))
+        self.io._latched = self.io._packet(0xFF, fake.CMD_REQUEST_STATE, (0, 0, 0, 0))
         reply = self.ds.command(fake.CMD_REQUEST_STATE)
         self.assertEqual(reply.msgid, 0x00)
 
@@ -92,8 +91,12 @@ class RuleOneRerequestEveryPoll(ProtocolTest):
         self.unit._work_for(20_000)
         self.ds.wait_idle()
         asks = len([c for c, _ in self.io.writes if c == fake.CMD_REQUEST_STATE])
-        self.assertGreaterEqual(asks, 5, "the unit repeats its last reply; polling "
-                                         "the stream without re-asking reads stale data")
+        self.assertGreaterEqual(
+            asks,
+            5,
+            "the unit repeats its last reply; polling the stream without "
+            "re-asking reads stale data",
+        )
 
     def test_a_change_is_only_seen_after_a_fresh_request(self):
         self.opened()
@@ -132,14 +135,21 @@ class RuleTwoCarriesStatus(ProtocolTest):
                 result = self.inner.write(buf)
                 latched = self.inner._latched
                 if latched[3] == fake.CMD_REQUEST_STATE:
-                    self.inner._latched = (
-                        latched[:3] + (fake.CMD_VERSION_B, 0x00, 0x02, 0x00, 0x79))
+                    self.inner._latched = latched[:3] + (
+                        fake.CMD_VERSION_B,
+                        0x00,
+                        0x02,
+                        0x00,
+                        0x79,
+                    )
                 return result
 
         self.ds._io = EchoesVersion(self.io)
         self.unit._work_for(3_000)
-        self.assertFalse(self.ds.wait_idle(2_000),
-                         "a non-status reply was accepted as proof of idleness")
+        self.assertFalse(
+            self.ds.wait_idle(2_000),
+            "a non-status reply was accepted as proof of idleness",
+        )
 
 
 class RuleThreeHomeFirst(ProtocolTest):
@@ -205,8 +215,10 @@ class RuleFourNeverSendWhileBusy(ProtocolTest):
         for slot in range(1, 51):
             self.ds.move_to(slot)
             self.assertEqual(self.unit.position, slot)
-        self.assertTrue(self.unit.dropped, "no command was ever lost to a blip, "
-                                           "so this proved nothing")
+        self.assertTrue(
+            self.unit.dropped,
+            "no command was ever lost to a blip, so this proved nothing",
+        )
 
 
 class WireErrors(ProtocolTest):
@@ -230,8 +242,10 @@ class WireErrors(ProtocolTest):
         self.io.unplug()
         with self.assertRaises(protocol.NotConnected):
             self.ds.status()
-        self.assertFalse(self.ds.connected,
-                         "a failed transfer must drop the handle, not keep using it")
+        self.assertFalse(
+            self.ds.connected,
+            "a failed transfer must drop the handle, not keep using it",
+        )
 
 
 class Connection(ProtocolTest):
@@ -266,10 +280,10 @@ class Positioning(ProtocolTest):
 
     def test_slot_bounds(self):
         self.opened()
-        self.ds.move_to(protocol.SLOT_MIN)
-        self.ds.move_to(protocol.SLOT_MAX)
+        self.ds.move_to(SLOT_MIN)
+        self.ds.move_to(SLOT_MAX)
         self.ds.move_to(protocol.HOME)
-        for bad in (-1, protocol.SLOT_MAX + 1):
+        for bad in (-1, SLOT_MAX + 1):
             with self.assertRaises(ValueError):
                 self.ds.move_to(bad)
 

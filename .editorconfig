@@ -1,0 +1,26 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+
+[*.py]
+indent_size = 4
+max_line_length = 88
+
+[*.{html,css,js,yml,yaml,toml,json}]
+indent_size = 2
+
+[*.{sh,sql}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+# Verbatim from upstream; do not reflow.
+[LICENSE]
+trim_trailing_whitespace = false
+insert_final_newline = false

@@ -21,7 +21,7 @@ real bug before it became a rule, so none of them should be "simplified" away:
 import time
 from typing import Callable, Optional
 
-from .slots import HOME, SLOT_MAX, SLOT_MIN
+from .slots import HOME, SLOT_MAX
 from .transport import PID, VID, HidTransport
 
 # Command codes (readme.txt; DiscStakka.py:14-22)
@@ -76,8 +76,16 @@ class Packet(object):
     __slots__ = ("tag", "unit", "msgid", "cmd", "x1", "x2", "x3", "x4")
 
     def __init__(self, raw):
-        (self.tag, self.unit, self.msgid, self.cmd,
-         self.x1, self.x2, self.x3, self.x4) = raw[:8]
+        (
+            self.tag,
+            self.unit,
+            self.msgid,
+            self.cmd,
+            self.x1,
+            self.x2,
+            self.x3,
+            self.x4,
+        ) = raw[:8]
 
     @property
     def status(self):
@@ -85,7 +93,13 @@ class Packet(object):
 
     def __repr__(self):
         return "<Packet cmd=%02x msgid=%02x %02x %02x %02x %02x>" % (
-            self.cmd, self.msgid, self.x1, self.x2, self.x3, self.x4)
+            self.cmd,
+            self.msgid,
+            self.x1,
+            self.x2,
+            self.x3,
+            self.x4,
+        )
 
 
 def describe_status(st):
@@ -150,8 +164,7 @@ class DiscStakka(object):
             if attempt + 1 < attempts:
                 time.sleep(0.4)
 
-        raise NotConnected(
-            "cannot open Disc Stakka (%04x:%04x): %s" % (VID, PID, last))
+        raise NotConnected("cannot open Disc Stakka (%04x:%04x): %s" % (VID, PID, last))
 
     def reconnect(self):
         """Drop the handle and open a fresh one. The manual recovery path."""
@@ -181,7 +194,7 @@ class DiscStakka(object):
             raw = self._io.read(64, timeout_ms)
         except (IOError, OSError) as exc:
             self.close()
-            raise NotConnected("read failed: %s" % exc)
+            raise NotConnected("read failed: %s" % exc) from exc
         if not raw:
             return None
         if len(raw) < 8:
@@ -200,7 +213,7 @@ class DiscStakka(object):
                 raise DeviceError("write failed")
         except (IOError, OSError) as exc:
             self.close()
-            raise NotConnected("write failed: %s" % exc)
+            raise NotConnected("write failed: %s" % exc) from exc
 
     def command(self, cmd, x1=0, x2=0, x3=0, x4=0, x5=0, timeout_ms=ACK_MS):
         """Send one command and return its reply.
@@ -247,7 +260,8 @@ class DiscStakka(object):
             if attempt + 1 < tries:
                 self.wait_idle(2_000)  # ride out the blip, then try again
         raise DeviceError(
-            "unit did not acknowledge command %02x (%d attempts)" % (cmd, tries))
+            "unit did not acknowledge command %02x (%d attempts)" % (cmd, tries)
+        )
 
     # -- state -----------------------------------------------------------
 

@@ -12,7 +12,8 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | Path | What |
 |---|---|
 | `app.py` | Flask routes, and `create_app()` |
-| `config.py` | Where state lives: data dir, db, traces, secret key, port |
+| `pyproject.toml` | Ruff config and the dev dependency group |
+| `discstakka/config.py` | Where state lives: data dir, db, traces, art, port |
 | `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/protocol.py` | HID wire protocol (a port of `discstakka.c`) |
 | `discstakka/slots.py` | `SLOT_MIN`, `SLOT_MAX`, `HOME` |
@@ -20,10 +21,10 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `discstakka/flows.py` | The eject, add and reset flows |
 | `discstakka/trace.py` | Per-job record of the status stream, and a null one |
 | `discstakka/jobs.py` | Job phases and the in-memory registry |
-| `catalog/db.py` | SQLite access and startup migrations |
-| `catalog/taxonomy.py` | The fixed category and console lists |
-| `catalog/art.py` | Cover art ingest (upload or URL), with SSRF guards |
-| `schema.sql` | Schema. Every statement is `IF NOT EXISTS` |
+| `discstakka/catalog/db.py` | SQLite access and startup migrations |
+| `discstakka/catalog/taxonomy.py` | The fixed category and console lists |
+| `discstakka/catalog/art.py` | Cover art ingest (upload or URL), with SSRF guards |
+| `discstakka/catalog/schema.sql` | Schema. Every statement is `IF NOT EXISTS` |
 | `static/base.css` | Baseline styles, CSS 2.1 only |
 | `static/modern.css` | Enhancements, all inside `@supports` |
 | `static/enhance.js` | Optional XHR polling. Nothing depends on it |
@@ -44,7 +45,8 @@ operating system's bundled Python.
 
 ```sh
 python3.14 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m pip install --group dev    # Ruff
 ```
 
 Run everything below from the project root with that environment's interpreter,
@@ -52,7 +54,8 @@ either by joining it (`. .venv/bin/activate`) or by calling `.venv/bin/python`
 directly. `python` below means whichever you chose.
 
 ```sh
-python -m unittest discover -s tests   # no hardware, no network, ~3 s
+python -m unittest discover -s tests -t .   # no hardware, no network, ~3 s
+ruff check . && ruff format --check .
 python tools/fakerun.py                # the app against a simulated carousel
 python app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the port
 python tools/ps3lint.py    # needs the server running
@@ -148,7 +151,9 @@ console you can't see.
   `modern.css`, and every page loses its styling.
 - Set `TZ`. `catalog/db.py` stamps rows with a naive `datetime.now()`, so a
   container on UTC writes times the pages then present as local.
-- `schema.sql` has to be in the image. `db.init()` reads it on every start.
+- `schema.sql` is package data at `discstakka/catalog/`, read through
+  `importlib.resources` on every `db.init()`. `COPY discstakka/` carries it;
+  there is no separate line to forget.
 - Keep `init: true`. Python as PID 1 is never sent a default-action SIGTERM, so
   without it every `compose stop` stalls to the timeout and then SIGKILLs.
 - Templates and static files are baked in, so `TEMPLATES_AUTO_RELOAD` does
@@ -172,7 +177,14 @@ Match the surrounding code:
 - Flash categories are `ok`, `warn`, and `error`.
 - User-facing messages are plain full sentences.
 
-No new dependencies without a clear need. The dataset is at most 100 rows, so
+Only `app` and `discstakka` are importable at the top level. Keep it that
+way: anything new belongs inside the package.
+
+Ruff's `UP` rules are deliberately not enabled - they would rewrite the
+`%`-formatting and `class X(object)` this file mandates. Don't add them.
+
+No new dependencies without a clear need. Pin them; the container build
+asserts hidapi is still the libusb backend. The dataset is at most 100 rows, so
 choose readable over clever.
 
 ## Comments: do not over-comment

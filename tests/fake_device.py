@@ -44,15 +44,17 @@ CMD_NEW_UNIT = 0xCC
 
 #: Opcodes whose reply carries the status word in x2/x3. Anything else that puts
 #: bytes there is a trap for a caller that forgets to check.
-WITH_STATUS = frozenset((CMD_REQUEST_STATE, CMD_SET_POS, CMD_SET_LED,
-                         CMD_CLEAR_ERR_2, CMD_ACCEPT_DISC))
+WITH_STATUS = frozenset(
+    (CMD_REQUEST_STATE, CMD_SET_POS, CMD_SET_LED, CMD_CLEAR_ERR_2, CMD_ACCEPT_DISC)
+)
 
 #: Answered even while the unit is busy. Rule 4 is about commands that actuate
 #: something; a unit that stayed silent under load could never report BUSY at
 #: all, and the captured traces are full of BUSY status words. 0x14 is not here
 #: because it clears a latched error as well as reporting position.
-ALWAYS_ANSWERED = frozenset((CMD_REQUEST_STATE, CMD_VERSION_A, CMD_VERSION_B,
-                             CMD_GET_SERIAL))
+ALWAYS_ANSWERED = frozenset(
+    (CMD_REQUEST_STATE, CMD_VERSION_A, CMD_VERSION_B, CMD_GET_SERIAL)
+)
 
 #: 0x0080 is set whenever the unit is busy; 0x8000 is set as well while it is
 #: working on a command. Idle blips show 0x0081, commanded motion 0x8081.
@@ -229,8 +231,11 @@ class Carousel(object):
         if self.busy and cmd not in ALWAYS_ANSWERED:
             self.dropped.append((cmd, args))
             return None
-        if (self.blips and cmd not in ALWAYS_ANSWERED
-                and self._rng.random() < self.blip_chance):
+        if (
+            self.blips
+            and cmd not in ALWAYS_ANSWERED
+            and self._rng.random() < self.blip_chance
+        ):
             # Housekeeping happened to start just as this arrived.
             self._work_for(BLIP_FOR_MS, working=False)
             self.dropped.append((cmd, args))
@@ -320,7 +325,7 @@ class Carousel(object):
 
 
 class SimulatedTransport(object):
-    """A Carousel wired up as a transport for :class:`discstakka.protocol.DiscStakka`."""
+    """A Carousel wired up as a transport for DiscStakka."""
 
     def __init__(self, clock, carousel=None, present=True):
         self.clock = clock

@@ -39,12 +39,13 @@ def run_eject(ds, conn, job, trace, disc_id):
         ds.park()
         db.log_event(conn, "failed", disc_id, slot, "eject found no disc")
         conn.commit()
-        job.fail("Slot %d appears to be empty. The catalogue may be out of "
-                 "step with the carousel - try Reconcile." % slot)
+        job.fail(
+            "Slot %d appears to be empty. The catalogue may be out of "
+            "step with the carousel - try Reconcile." % slot
+        )
         return
 
-    job.set_phase(jobs.PRESENTED, "Take the disc from the unit.",
-                  window_s=5)
+    job.set_phase(jobs.PRESENTED, "Take the disc from the unit.", window_s=5)
     trace.mark("presented; waiting for it to be taken")
 
     if not ds.wait_for_take():
@@ -54,18 +55,21 @@ def run_eject(ds, conn, job, trace, disc_id):
         ds.park()
         db.log_event(conn, "retracted", disc_id, slot)
         conn.commit()
-        job.fail("The disc was not taken in time, so the unit was told to "
-                 "take it back into slot %d. The catalogue has not changed."
-                 % slot)
+        job.fail(
+            "The disc was not taken in time, so the unit was told to "
+            "take it back into slot %d. The catalogue has not changed." % slot
+        )
         return
 
     job.set_phase(jobs.PARKING, "Returning to home...")
     trace.mark("taken; returning to home")
     ds.park()
     db.mark_out(conn, disc_id)
-    job.succeed("A disc was taken from slot %d. The catalogue now lists %s "
-                "as checked out and holds the slot for its return."
-                % (slot, disc["title"]), disc_id=disc_id)
+    job.succeed(
+        "A disc was taken from slot %d. The catalogue now lists %s "
+        "as checked out and holds the slot for its return." % (slot, disc["title"]),
+        disc_id=disc_id,
+    )
 
 
 def run_add(ds, conn, job, trace, slot, disc_id=None):
@@ -108,10 +112,14 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
     if returning:
         db.mark_stored(conn, disc_id)
         disc = db.get_disc(conn, disc_id)
-        job.succeed("%s is back in slot %d."
-                    % (disc["title"] if disc else "Disc", slot),
-                    disc_id=disc_id)
+        job.succeed(
+            "%s is back in slot %d." % (disc["title"] if disc else "Disc", slot),
+            disc_id=disc_id,
+        )
     else:
         new_id = db.create_disc(conn, slot, title="Untitled disc (slot %d)" % slot)
-        job.succeed("Disc loaded into slot %d. Now give it a name." % slot,
-                    disc_id=new_id, needs_details=True)
+        job.succeed(
+            "Disc loaded into slot %d. Now give it a name." % slot,
+            disc_id=new_id,
+            needs_details=True,
+        )
