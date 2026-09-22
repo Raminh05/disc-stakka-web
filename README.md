@@ -36,8 +36,9 @@ python app.py
 
 Every `python` in this README means whichever of those you picked.
 
-`uv.lock` pins all 16 packages, direct and transitive. `requirements.txt` is
-**generated** from it — edit `pyproject.toml` and re-run
+`uv.lock` pins all 16 packages, direct and transitive, and the container
+image installs straight from it. `requirements.txt` is **generated** for people
+without uv — edit `pyproject.toml` and re-run
 `uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o requirements.txt`
 rather than editing it by hand. CI checks both are in step.
 

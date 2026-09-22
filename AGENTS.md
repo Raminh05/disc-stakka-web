@@ -34,7 +34,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
 | `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
 | `.github/workflows/ci.yml` | Suite, suite-without-hidapi, and the image build |
-| `Dockerfile` | Container image, Linux hosts only |
+| `Dockerfile` | Container image, Linux hosts only; installs from `uv.lock` |
 | `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
 | `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
 | `deploy/99-discstakka.rules` | Host udev rule for `0718:d000`, installed by hand |
@@ -190,8 +190,9 @@ uv export --no-dev --no-hashes --no-emit-project \
 ```
 
 CI fails if the lock does not match `pyproject.toml`, or the export does not
-match the lock. The container installs from `requirements.txt`, not from uv, so
-a stale export means the image ships versions nobody resolved.
+match the lock. The image installs from `uv.lock` directly, so the export only
+serves people running pip - but it is still checked, because a stale one hands
+them a different resolution from the one the suite and the image ran on.
 
 No new dependencies without a clear need. They are pinned exactly, not ranged,
 because the container build asserts hidapi is still the libusb backend and that

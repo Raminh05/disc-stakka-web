@@ -15,11 +15,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-RUN python -m venv /opt/venv
-ENV PATH=/opt/venv/bin:$PATH
+# Pinned like any other build input. Upgrading uv is a deliberate act.
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /bin/uv
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Installed from uv.lock, not from requirements.txt, so the image gets exactly
+# the resolution the suite ran against and there is no export left to go stale.
+# `package = false` in pyproject means this installs the dependencies and does
+# not try to build the application, which has no wheel to build.
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+
+ENV PATH=/opt/venv/bin:$PATH
 
 # On Linux this wheel ships two modules: hid (libusb backend) and hidraw (hidraw
 # backend). protocol.py imports hid, so the container needs usbfs at /dev/bus/usb,
