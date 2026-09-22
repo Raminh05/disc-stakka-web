@@ -5,6 +5,8 @@ clock advances in one place and nothing races. Threading and ownership are
 covered separately in ControllerTest.
 """
 
+import contextlib
+import io
 import os
 import re
 import shutil
@@ -321,8 +323,11 @@ class ControllerTest(FlowTest):
     def test_the_trace_is_closed_off_even_when_a_job_fails(self):
         control = self.controller()
         job = jobs.Job("reset", "Reset the unit")
-        control.submit(job, lambda ds, conn, job, trace: 1 / 0)
-        self.wait_for(job)
+        # The last-resort guard prints the traceback, which is right in
+        # production and only noise here.
+        with contextlib.redirect_stderr(io.StringIO()):
+            control.submit(job, lambda ds, conn, job, trace: 1 / 0)
+            self.wait_for(job)
         with open(self.only_trace()) as fh:
             self.assertIn("-- end", fh.read())
 

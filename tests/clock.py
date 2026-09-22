@@ -45,3 +45,20 @@ def virtual_clock(*modules):
     finally:
         for m, original in saved:
             m.time = original
+
+
+class RealClock(object):
+    """Wall time, in the shape the simulated unit expects.
+
+    For the web tests and tools/fakerun.py, where jobs run on real threads and
+    a person is watching: the carousel should take the seconds it really takes.
+    """
+
+    @property
+    def ms(self):
+        import time
+
+        return int(time.monotonic() * 1000)
+
+    def advance_ms(self, ms):
+        pass
