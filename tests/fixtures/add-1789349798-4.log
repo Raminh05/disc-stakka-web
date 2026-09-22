@@ -1,0 +1,22 @@
+# Load a disc into slot 4  slot=4
+   0.00s  -- move to slot 4
+   0.09s  0001 [HOMED]
+   0.98s  8081 [BUSY HOMED]
+   2.78s  0001 [HOMED]
+   2.78s  -- awaiting insert (watching DISC_WAITING)
+   4.28s  0081 [BUSY HOMED]
+   4.60s  0001 [HOMED]
+   7.32s  0081 [BUSY HOMED]
+   7.61s  0001 [HOMED]
+  10.33s  0081 [BUSY HOMED]
+  10.62s  0001 [HOMED]
+  12.73s  8081 [BUSY HOMED]
+  13.05s  9081 [BUSY DISC_WAITING HOMED]
+  13.05s  -- disc seen; settling before 0x1D
+  14.84s  8881 [BUSY NEW_DISC_ACK HOMED]
+  16.34s  0801 [NEW_DISC_ACK HOMED]
+  16.95s  -- 0x1D acknowledged
+  17.85s  8081 [BUSY HOMED]
+  19.93s  0001 [HOMED]
+  19.93s  -- parked; watching for 10s to see if it comes back out
+  30.20s  -- end

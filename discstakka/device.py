@@ -67,8 +67,8 @@ class Busy(Exception):
 
 
 class DeviceController(object):
-    def __init__(self, db_path=None):
-        self._ds = DiscStakka()
+    def __init__(self, ds=None, db_path=None):
+        self._ds = ds if ds is not None else DiscStakka()
         self._db_path = db_path
         self._lock = threading.Lock()
         self._current = None

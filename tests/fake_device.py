@@ -25,6 +25,7 @@ DISC_IN_BAY (0x0400) and ACK_TIMEOUT (0x0200).
 """
 
 import heapq
+import random
 
 VID = 0x0718
 PID = 0xD000
@@ -46,6 +47,13 @@ CMD_NEW_UNIT = 0xCC
 WITH_STATUS = frozenset((CMD_REQUEST_STATE, CMD_SET_POS, CMD_SET_LED,
                          CMD_CLEAR_ERR_2, CMD_ACCEPT_DISC))
 
+#: Answered even while the unit is busy. Rule 4 is about commands that actuate
+#: something; a unit that stayed silent under load could never report BUSY at
+#: all, and the captured traces are full of BUSY status words. 0x14 is not here
+#: because it clears a latched error as well as reporting position.
+ALWAYS_ANSWERED = frozenset((CMD_REQUEST_STATE, CMD_VERSION_A, CMD_VERSION_B,
+                             CMD_GET_SERIAL))
+
 #: 0x0080 is set whenever the unit is busy; 0x8000 is set as well while it is
 #: working on a command. Idle blips show 0x0081, commanded motion 0x8081.
 BUSY_IDLE = 0x0080
@@ -64,8 +72,12 @@ REPEAT_MS = 143  # the unit repeats its last reply about seven times a second
 
 SEEK_BASE_MS = 1_500
 SEEK_PER_SLOT_MS = 56
-BLIP_EVERY_MS = 3_000
 BLIP_FOR_MS = 300
+#: protocol.py's require() records the measured loss as about one move in ten.
+#: The blip is modelled as that chance per actuating command rather than as a
+#: fixed period, because a periodic one can never be hit: wait_idle returns the
+#: instant a blip ends, leaving the command a clear run until the next.
+BLIP_CHANCE = 0.1
 APERTURE_MS = 1_500  # disc seen -> drawn off the aperture, NEW_DISC_ACK set
 SETTLE_MS = 1_800  # NEW_DISC_ACK set -> unit idle and able to hear 0x1D
 INGEST_MS = 1_800  # 0x1D acknowledged -> disc in the slot
@@ -103,7 +115,10 @@ class Carousel(object):
         self.unknown_bit = False
 
         self.blips = False
+        self.blip_chance = BLIP_CHANCE
+        self._rng = random.Random(20050209)  # the 0.03 tarball's date; any seed
         self.busy_until = 0
+        self._working = True
         self._events = []
         self._seq = 0
 
@@ -131,8 +146,9 @@ class Carousel(object):
             _, _, fn = heapq.heappop(self._events)
             fn()
 
-    def _work_for(self, ms):
+    def _work_for(self, ms, working=True):
         self.busy_until = max(self.busy_until, self.now + ms)
+        self._working = working
 
     @property
     def busy(self):
@@ -143,9 +159,7 @@ class Carousel(object):
     def status(self):
         st = 0
         if self.busy:
-            st |= BUSY_IDLE | BUSY_WORKING
-        elif self.blips and (self.now % BLIP_EVERY_MS) < BLIP_FOR_MS:
-            st |= BUSY_IDLE
+            st |= BUSY_IDLE | BUSY_WORKING if self._working else BUSY_IDLE
         if self.disc_waiting:
             st |= DISC_WAITING
         if self.new_disc_ack:
@@ -212,7 +226,13 @@ class Carousel(object):
         """
         self._run_due()
 
-        if self.busy:
+        if self.busy and cmd not in ALWAYS_ANSWERED:
+            self.dropped.append((cmd, args))
+            return None
+        if (self.blips and cmd not in ALWAYS_ANSWERED
+                and self._rng.random() < self.blip_chance):
+            # Housekeeping happened to start just as this arrived.
+            self._work_for(BLIP_FOR_MS, working=False)
             self.dropped.append((cmd, args))
             return None
         if cmd == CMD_SET_POS and args[0] != 0 and not self.homed:

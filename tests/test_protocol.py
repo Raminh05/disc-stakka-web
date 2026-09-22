@@ -69,10 +69,10 @@ class MessageIdPairing(ProtocolTest):
 
     def test_a_stale_latched_reply_is_not_mistaken_for_an_answer(self):
         self.opened()
-        # Nothing is processed while busy, so the latched packet keeps its old
-        # message id and must not satisfy the command that was just sent.
+        # An actuating command is not processed while busy, so the latched
+        # packet keeps its old message id and must not satisfy it.
         self.unit._work_for(5_000)
-        self.assertIsNone(self.ds.command(fake.CMD_REQUEST_STATE, timeout_ms=500))
+        self.assertIsNone(self.ds.command(fake.CMD_SET_LED, 1, 1, timeout_ms=500))
 
     def test_message_id_wraps_at_255(self):
         self.opened()
@@ -178,9 +178,15 @@ class RuleThreeHomeFirst(ProtocolTest):
 
 class RuleFourNeverSendWhileBusy(ProtocolTest):
     def test_a_command_sent_while_busy_is_simply_unanswered(self):
+        # Status requests are still answered - the unit reports BUSY rather than
+        # going silent, which is how wait_idle sees anything at all. It is the
+        # commands that actuate something that vanish.
         self.opened()
         self.unit._work_for(5_000)
-        self.assertIsNone(self.ds.command(fake.CMD_REQUEST_STATE, timeout_ms=500))
+        self.assertIsNone(self.ds.command(fake.CMD_SET_LED, 1, 1, timeout_ms=500))
+        busy = self.ds.command(fake.CMD_REQUEST_STATE, timeout_ms=500)
+        self.assertIsNotNone(busy)
+        self.assertTrue(busy.status & protocol.ST_BUSY)
 
     def test_require_gives_up_after_three_attempts(self):
         self.opened()
