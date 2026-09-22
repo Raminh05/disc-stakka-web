@@ -290,3 +290,24 @@ written to the `event` table.
 
 A disc that is checked out **keeps its slot reserved** so it has somewhere to go
 back to. "Put this disc back" re-runs the load flow against that slot.
+
+## AI assistance
+
+Parts of this project were written with Claude (Anthropic). `git log` shows
+which commits: they carry a `Co-Authored-By` trailer. The first commit is an
+import of pre-existing code and only the commit itself was made that way.
+
+What that should and should not buy you:
+
+- **The protocol is not invented.** It is a port of the 2005 reverse
+  engineering described under [Prior work](#prior-work), and the four rules in
+  `protocol.py` each came from a failure on a real carousel. The evidence is in
+  `data/traces`.
+- **The simulator is calibrated for loading and returning, not for ejecting.**
+  Every captured run on hand is a load or a return, so `DISC_IN_BAY` and
+  `ACK_TIMEOUT` are modelled from what the client code expects rather than from
+  anything observed. A green suite says the code agrees with the model; for the
+  eject path it does not say the model agrees with the hardware. Eject is now
+  traced, so one real ejection would settle it.
+- **Anything that moves the carousel deserves a run on the real unit** before it
+  is trusted, whoever or whatever wrote it.
