@@ -21,18 +21,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
-          cache: pip
+          enable-cache: true
 
       # Ruff is a development tool, so it lives in the pyproject dependency
-      # group rather than in requirements.txt. No runtime deps needed to lint.
+      # group. No runtime dependencies are needed to lint.
       - name: Install Ruff
-        run: pip install --group dev
+        run: uv sync --frozen --only-group dev
 
-      - run: ruff check .
-      - run: ruff format --check .
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+
+      # uv.lock must match pyproject.toml, and requirements.txt must match the
+      # lock. Without these two the lock silently becomes decoration and the
+      # container installs something nobody resolved.
+      - name: Lock is current
+        run: uv lock --check
+
+      # Exported over itself and compared with git: uv writes the invoking
+      # command into the header, so exporting to any other path always differs.
+      - name: requirements.txt matches the lock
+        run: |
+          uv export --no-dev --no-hashes --no-emit-project \
+            --format requirements-txt -o requirements.txt
+          git diff --exit-code -- requirements.txt \
+            || { echo "::error::requirements.txt is stale; re-run uv export"; exit 1; }
 
   tests:
     name: Test suite
@@ -42,10 +56,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
-          cache: pip
+          enable-cache: true
 
       # hidapi and Pillow fall back to an sdist build when no wheel matches the
       # interpreter. These are the Dockerfile build stage's packages.
@@ -57,14 +70,12 @@ jobs:
             libusb-1.0-0-dev libudev-dev libjpeg-dev zlib1g-dev
 
       - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: uv sync --frozen
 
       # test_ps3lint.py boots the simulated server and runs tools/ps3lint.py
       # against it, so the markup and CSS 2.1 rules are covered here as well.
       - name: Run tests
-        run: python -m unittest discover -s tests -t . -v
+        run: uv run --no-sync python -m unittest discover -s tests -t . -v
 
   no-hidapi:
     name: Suite runs without hidapi
@@ -74,19 +85,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.14"
-          cache: pip
+          enable-cache: true
 
       # Nothing above discstakka/transport.py may touch hidapi. If this job
       # starts failing, the hardware dependency has leaked back into the
       # catalogue, the flows or the web layer.
       - name: Install everything except hidapi
         run: |
-          python -m pip install --upgrade pip
+          uv venv
           grep -iv '^hidapi' requirements.txt > requirements-nohid.txt
-          pip install -r requirements-nohid.txt
+          uv pip install -r requirements-nohid.txt
 
       - name: Assert hidapi really is absent
         run: |
@@ -95,8 +105,10 @@ jobs:
             exit 1
           fi
 
+      # Not `uv run`: this environment is deliberately not the project's, so
+      # call its interpreter directly rather than let uv reconcile it.
       - name: Run tests
-        run: python -m unittest discover -s tests -t . -v
+        run: .venv/bin/python -m unittest discover -s tests -t . -v
 
   container:
     name: Container image

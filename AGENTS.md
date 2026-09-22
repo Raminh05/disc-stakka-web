@@ -12,7 +12,8 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | Path | What |
 |---|---|
 | `app.py` | Flask routes, and `create_app()` |
-| `pyproject.toml` | Ruff config and the dev dependency group |
+| `pyproject.toml` | Dependencies, Ruff config, `package = false` |
+| `uv.lock` | All 16 packages pinned. `requirements.txt` is exported from it |
 | `discstakka/config.py` | Where state lives: data dir, db, traces, art, port |
 | `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/simulator.py` | The simulated carousel, calibrated from `data/traces` |
@@ -40,26 +41,20 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 
 ## Running and checking
 
-Use a virtual environment at `.venv` built from **Python 3.14**. Don't use an
-operating system's bundled Python.
+The project is managed with **uv**. `uv sync` builds `.venv` from `uv.lock`,
+fetching Python 3.14 if it is not there. Never use an OS-bundled Python.
 
 ```sh
-python3.14 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -m pip install --group dev    # Ruff
+uv sync
+uv run python -m unittest discover -s tests -t .   # no hardware, no network, ~3 s
+uv run ruff check . && uv run ruff format --check .
+uv run tools/fakerun.py    # the app against a simulated carousel
+uv run app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the port
+uv run tools/ps3lint.py    # needs the server running
 ```
 
-Run everything below from the project root with that environment's interpreter,
-either by joining it (`. .venv/bin/activate`) or by calling `.venv/bin/python`
-directly. `python` below means whichever you chose.
-
-```sh
-python -m unittest discover -s tests -t .   # no hardware, no network, ~3 s
-ruff check . && ruff format --check .
-python tools/fakerun.py                # the app against a simulated carousel
-python app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the port
-python tools/ps3lint.py    # needs the server running
-```
+Without uv, `pip install -r requirements.txt` into a 3.14 venv still works and
+`.venv/bin/python` replaces `uv run`. Run everything from the project root.
 
 - Talking to the unit needs USB HID access for the account running the app.
   On Linux that usually means a udev rule for `0718:d000`.
@@ -186,8 +181,21 @@ way: anything new belongs inside the package.
 Ruff's `UP` rules are deliberately not enabled - they would rewrite the
 `%`-formatting and `class X(object)` this file mandates. Don't add them.
 
-No new dependencies without a clear need. Pin them; the container build
-asserts hidapi is still the libusb backend. The dataset is at most 100 rows, so
+**`requirements.txt` is generated.** Change dependencies in `pyproject.toml`,
+then `uv lock` and re-export:
+
+```sh
+uv export --no-dev --no-hashes --no-emit-project \
+    --format requirements-txt -o requirements.txt
+```
+
+CI fails if the lock does not match `pyproject.toml`, or the export does not
+match the lock. The container installs from `requirements.txt`, not from uv, so
+a stale export means the image ships versions nobody resolved.
+
+No new dependencies without a clear need. They are pinned exactly, not ranged,
+because the container build asserts hidapi is still the libusb backend and that
+is a thing to change on purpose. The dataset is at most 100 rows, so
 choose readable over clever.
 
 ## Comments: do not over-comment

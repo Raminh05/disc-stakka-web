@@ -10,29 +10,36 @@ project. See [Prior work](#prior-work).
 
 ## Running it
 
-Needs **Python 3.14** — not an operating system's bundled Python. Create the
-virtual environment and install the dependencies once:
+Needs **Python 3.14** — not an operating system's bundled Python.
+
+With [uv](https://docs.astral.sh/uv/), which is how the project is set up:
+
+```sh
+uv sync                     # builds .venv from uv.lock, fetching 3.14 if needed
+uv run app.py               # http://0.0.0.0:5050
+```
+
+Without it, pip works from the generated `requirements.txt`:
 
 ```sh
 python3.14 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-```
-
-Then either join the environment and run the app:
-
-```sh
-. .venv/bin/activate        # fish: source .venv/bin/activate.fish
-python app.py               # http://0.0.0.0:5050
-```
-
-or, if you would rather not, call that interpreter directly — it does the same
-thing:
-
-```sh
 .venv/bin/python app.py
 ```
 
-Every `python` in this README means whichever of those two you picked.
+Either way you can join the environment instead and drop the prefix:
+
+```sh
+. .venv/bin/activate        # fish: source .venv/bin/activate.fish
+python app.py
+```
+
+Every `python` in this README means whichever of those you picked.
+
+`uv.lock` pins all 16 packages, direct and transitive. `requirements.txt` is
+**generated** from it — edit `pyproject.toml` and re-run
+`uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o requirements.txt`
+rather than editing it by hand. CI checks both are in step.
 
 Then browse to `http://<this-machine>:5050/` from anywhere on the LAN.
 Set `DISCSTAKKA_PORT` to move it. Port 5000 is deliberately avoided:
@@ -200,6 +207,8 @@ move after one will home the carousel first. That is automatic.
 | Path | What |
 |---|---|
 | `app.py` | Routes and `create_app()`; stays at the root so Flask finds `templates/` |
+| `pyproject.toml` | Dependencies, Ruff config, and `package = false` |
+| `uv.lock` | All 16 packages pinned; `requirements.txt` is exported from it |
 | `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/simulator.py` | The simulated carousel, the other transport |
 | `discstakka/protocol.py` | HID protocol, ported from `discstakka.c` |
@@ -226,15 +235,15 @@ and one test checks that a simulated load still produces the same status
 signature as a recorded one.
 
 ```sh
-python -m unittest discover -s tests -t .   # ~3 s, no hardware, no network
-python tools/fakerun.py                     # the app, browsable, with a fake unit
+uv run python -m unittest discover -s tests -t .   # ~3 s, no hardware, no network
+uv run tools/fakerun.py                           # the app, browsable, with a fake unit
 ```
 
-Linting is Ruff, configured in `pyproject.toml` and installed with
-`pip install --group dev`:
+Linting is Ruff, configured in `pyproject.toml` and installed by `uv sync` as
+part of the `dev` dependency group:
 
 ```sh
-ruff check . && ruff format --check .
+uv run ruff check . && uv run ruff format --check .
 ```
 
 `fakerun.py` gives you the physical half on stdin: `i` to insert a disc, `t` to
