@@ -36,6 +36,7 @@ jobs:
 
   tests:
     name: Test suite
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -67,6 +68,7 @@ jobs:
 
   no-hidapi:
     name: Suite runs without hidapi
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -98,6 +100,7 @@ jobs:
 
   container:
     name: Container image
+    needs: lint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
