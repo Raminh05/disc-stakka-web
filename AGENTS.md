@@ -38,6 +38,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
 | `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
 | `deploy/99-discstakka.rules` | Host udev rule for `0718:d000`, installed by hand |
+| `flake.nix` | `nix develop`: Python 3.14 and uv only, never the Python deps |
 
 ## Running and checking
 
@@ -53,8 +54,10 @@ uv run app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the
 uv run tools/ps3lint.py    # needs the server running
 ```
 
-Without uv, `pip install -r requirements.txt` into a 3.14 venv still works and
-`.venv/bin/python` replaces `uv run`. Run everything from the project root.
+`nix develop` provides Python 3.14 and uv and nothing else; `uv sync` inside
+it works as above. Without uv, `pip install -r requirements.txt` into a 3.14
+venv still works and `.venv/bin/python` replaces `uv run`. Run everything from
+the project root.
 
 - Talking to the unit needs USB HID access for the account running the app.
   On Linux that usually means a udev rule for `0718:d000`.
@@ -71,6 +74,9 @@ Without uv, `pip install -r requirements.txt` into a 3.14 venv still works and
   test cannot disagree with it. Keep it that way.
 - Nothing above `discstakka/transport.py` may import `hid`. The `no-hidapi` CI
   job exists to catch that.
+- `flake.nix` carries the toolchain, never the Python dependencies. Adding
+  flask or hidapi back to it gives nix and uv separate ideas of which version
+  this is, which is what it used to do.
 - **Do not trigger hardware actions without asking.** That covers eject,
   return, add, reset, and `python -m discstakka.protocol`, because they move a
   real carousel. Browsing pages, `/device`, and the lint are safe.

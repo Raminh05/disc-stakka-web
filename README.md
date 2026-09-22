@@ -19,7 +19,10 @@ uv sync                     # builds .venv from uv.lock, fetching 3.14 if needed
 uv run app.py               # http://0.0.0.0:5050
 ```
 
-Without it, pip works from the generated `requirements.txt`:
+With nix, `nix develop` puts Python 3.14 and uv on your path, and `uv sync`
+does the rest — the shell carries the toolchain, the lock carries the packages.
+
+Without uv, pip works from the generated `requirements.txt`:
 
 ```sh
 python3.14 -m venv .venv
