@@ -1,0 +1,173 @@
+# AGENTS.md
+
+Guidance for coding agents working in this repository. Read `README.md` first:
+it explains the design and why it is the way it is.
+
+## What this is
+
+A Flask web catalogue for the Imation Disc Stakka USB CD carousel. You can
+browse discs, eject one, or load a new one from any browser on the LAN. The
+oldest browser it has to support is the PlayStation 3's NetFront.
+
+| Path | What |
+|---|---|
+| `app.py` | Flask routes |
+| `discstakka/protocol.py` | HID wire protocol (a port of `discstakka.c`) |
+| `discstakka/device.py` | The single worker thread that owns the device, and the eject/add/reset flows |
+| `discstakka/jobs.py` | Job phases and the in-memory registry |
+| `catalog/db.py` | SQLite access and startup migrations |
+| `catalog/taxonomy.py` | The fixed category and console lists |
+| `catalog/art.py` | Cover art ingest (upload or URL), with SSRF guards |
+| `schema.sql` | Schema. Every statement is `IF NOT EXISTS` |
+| `static/base.css` | Baseline styles, CSS 2.1 only |
+| `static/modern.css` | Enhancements, all inside `@supports` |
+| `static/enhance.js` | Optional XHR polling. Nothing depends on it |
+| `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
+| `Dockerfile` | Container image, Linux hosts only |
+| `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
+| `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
+| `deploy/99-discstakka.rules` | Host udev rule for `0718:d000`, installed by hand |
+
+## Running and checking
+
+Use a virtual environment at `.venv` built from **Python 3.14**, with
+`requirements.txt` installed. Don't use an operating system's bundled Python.
+Run these from the project root with that venv's Python:
+
+```sh
+python app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the port
+python tools/ps3lint.py    # needs the server running
+```
+
+`run.sh` is a shortcut for the first command on macOS and Linux.
+
+- Talking to the unit needs USB HID access for the account running the app.
+  On Linux that usually means a udev rule for `0718:d000`.
+- There is no test suite. After a UI change, run `ps3lint.py` against the
+  running server and open the affected pages.
+- **Do not trigger hardware actions without asking.** That covers eject,
+  return, add, reset, and `python -m discstakka.protocol`, because they move a
+  real carousel. Browsing pages, `/device`, and the lint are safe.
+- Leave `data/` alone (`catalog.db`, `secret_key`, `traces/`). It holds the
+  user's real catalogue and device logs.
+
+## Hard constraints
+
+These are load-bearing. Breaking one fails silently, on hardware or on a
+console you can't see.
+
+**Process model**
+- Run single-process. The HID handle and the job registry live in memory.
+  Never add multi-worker WSGI configs.
+- Web requests never touch the device directly. They submit a `jobs.Job` via
+  `controller.submit` and redirect to the job page, which polls it.
+- The container runs the same way: its `CMD` is `python app.py`. Never put
+  gunicorn or uwsgi in the image.
+
+**PS3 / old-browser compatibility**
+- Pages are server-rendered, forms use POST, and no JavaScript is required
+  anywhere. `enhance.js` has to stay optional and must not throw.
+- Redirect after a POST with `see_other()` (303), never plain `redirect()`.
+- Read-only routes accept both `GET` and `POST`. Routes that change state
+  accept `POST` only.
+- Long operations poll with `<meta http-equiv="refresh">`. The tag is left out
+  once the job is done.
+- Markup rules:
+  - Use `<input type="submit">`, not `<button>`.
+  - No inline `on*=` handlers.
+  - No HTML5 sectioning elements and no HTML5 input types.
+  - No `<canvas>`, `<svg>`, `<video>`, or `<audio>`.
+  - Declare the charset with the `http-equiv` meta, not `<meta charset>`.
+  - Lay pages out with tables.
+- `base.css` must stay CSS 2.1. That rules out flex, grid, `var()`, `rem`,
+  `vh`, `vw`, `rgb()`, `rgba()`, `calc()`, media queries, and CSS3 selectors.
+  Modern CSS goes in `modern.css`, inside `@supports`. `base.css` has to work
+  on its own.
+- Cover art is always re-encoded to baseline JPEG through `art.store`. Never
+  serve WebP or progressive JPEG.
+- Categories and consoles are closed lists and use `<select>`. Pass input
+  through `taxonomy.category()` and `taxonomy.platform()`.
+
+**Protocol**
+- The four rules at the top of `protocol.py` each came from a real bug. Do not
+  "simplify" them away:
+  - Re-request state on every poll.
+  - Check `CARRIES_STATUS`.
+  - Home before any positional move.
+  - Never send while BUSY.
+- Keep the retries in `require()`, the settle wait in `ingest()`, and the
+  re-enumeration in `open()`.
+
+**Database**
+- A slot is occupied when a row references it. A disc that is checked out
+  keeps its slot.
+- Schema changes need a migration in `db._migrate`, because `schema.sql` never
+  alters an existing table.
+- Log hardware actions to the `event` table.
+
+**Container**
+- Linux hosts only, and rootful Docker. Docker Desktop on macOS cannot pass the
+  unit through, and rootless cannot delegate the device cgroup.
+- The device arrives through **libusb, not hidraw**. On Linux the `hidapi` wheel
+  ships two modules, and `protocol.py` imports `hid`, which is the libusb one - so
+  the node is `/dev/bus/usb/<bus>/<dev>` and the cgroup rule is major 189. The
+  build asserts it from the compiled module's symbols, not from a library name:
+  auditwheel renames the vendored libusb, so matching on the filename never fires.
+  If a release flips `hid` to hidraw, the usbfs access is useless and silent. Fix
+  the pass-through; don't drop the assertion.
+- The whole `/dev/bus/usb` tree is mounted so a node that re-enumerates after a
+  sleep is visible at all. `device_cgroup_rules` permits major 189 as a *class*, so
+  the udev rule's group on this unit's node is what narrows it to the carousel -
+  which only works while the app runs non-root.
+- Cover art mounts at `static/art`. Mounting over `static/` hides `base.css` and
+  `modern.css`, and every page loses its styling.
+- Set `TZ`. `catalog/db.py` stamps rows with a naive `datetime.now()`, so a
+  container on UTC writes times the pages then present as local.
+- `schema.sql` has to be in the image. `db.init()` reads it on every start.
+- Keep `init: true`. Python as PID 1 is never sent a default-action SIGTERM, so
+  without it every `compose stop` stalls to the timeout and then SIGKILLs.
+- Templates and static files are baked in, so `TEMPLATES_AUTO_RELOAD` does
+  nothing there. Editing either needs a rebuild.
+- One owner at a time. A native `run.sh` and the container will both open the
+  device, and the libusb backend detaches the kernel driver while it holds it.
+- `docker-entrypoint.sh` is a preflight, not a supervisor. It reports what the app
+  cannot - hidapi loses the errno, so a wrong group and a missing cgroup rule are
+  indistinguishable from inside - and then `exec`s the server, which is what keeps
+  signals reaching it. Only an unwritable `data/` is fatal. Opening the node there
+  claims nothing and sends no transfer, so it is not a hardware action.
+- `docker compose run --rm discstakka true` runs the preflight and stops, which is
+  the safe way to check permissions without starting anything.
+
+## Code style
+
+Match the surrounding code:
+- `%`-formatting.
+- Plain `sqlite3` with `?` parameters, and `with conn:` for writes.
+- Open connections in `try`/`finally`.
+- Flash categories are `ok`, `warn`, and `error`.
+- User-facing messages are plain full sentences.
+
+No new dependencies without a clear need. The dataset is at most 100 rows, so
+choose readable over clever.
+
+## Comments: do not over-comment
+
+**Do not over-comment the code.** Most lines need no comment at all.
+
+- Write a comment only when the *why* is not obvious from the code. Examples:
+  a hardware quirk, a browser limitation, a bug that turned into a rule, or a
+  security trade-off.
+- Don't narrate what the code does. Don't restate the function name, and don't
+  label obvious steps (`# open the connection`, `# loop over slots`).
+- Don't add docstrings to small or self-explanatory functions. One line is
+  usually enough when a docstring is warranted.
+- No commented-out code. No change-log comments (`# changed X to Y`,
+  `# fixed bug`, `# new:`). No TODOs unless asked. That history belongs in the
+  commit message or your reply.
+- Don't add section-divider comments beyond the existing `# -- name ---`
+  headers.
+- When you edit code, don't pile comments onto it. If a clearer name removes
+  the need for a comment, rename instead.
+- Keep the existing comments that record hardware or browser behaviour (the
+  protocol rules, why 303, why re-encode). They are the kind worth having. Just
+  don't add more of that length for ordinary code.

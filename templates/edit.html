@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ disc.title }} &mdash; Disc Stakka{% endblock %}
+{% block content %}
+
+<p class="crumb"><a href="{{ url_for('disc_page', disc_id=disc.id) }}">&laquo; Back</a></p>
+<h1>Slot {{ disc.slot }}</h1>
+
+<form method="post" action="{{ url_for('disc_edit', disc_id=disc.id) }}"
+      enctype="multipart/form-data">
+<table class="form" cellspacing="0" cellpadding="0">
+<tr><th>Title</th><td>
+  <input type="text" name="title" value="{{ disc.title }}" size="34"></td></tr>
+<tr><th>Artist / studio</th><td>
+  <input type="text" name="subtitle" value="{{ disc.subtitle or '' }}" size="34"></td></tr>
+<tr><th>Category</th><td>
+  <select name="category">
+    <option value="">&mdash;</option>
+    {% for c in CATEGORIES %}
+      <option value="{{ c }}"{% if disc.category == c %} selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select></td></tr>
+<tr><th>Console</th><td>
+  <select name="platform">
+    <option value="">&mdash;</option>
+    {% for p in PLATFORMS %}
+      <option value="{{ p }}"{% if disc.platform == p %} selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+  <p class="hint">For {{ GAMES|lower }} only. Anything else is stored without a
+  console, whatever is picked here.</p></td></tr>
+<tr><th>Notes</th><td>
+  <textarea name="notes" rows="4" cols="34">{{ disc.notes or '' }}</textarea></td></tr>
+<tr><th>Cover art</th><td>
+  {% if disc.art_path %}
+    <img src="{{ url_for('static', filename='art/' + disc.art_path + '_thumb.jpg') }}"
+         width="80" height="80" alt=""><br>
+  {% endif %}
+  <input type="file" name="art_file"><br>
+  <span class="hint">or paste an image address</span><br>
+  <input type="text" name="art_url" size="34">
+  <p class="hint">Uploading needs a modern browser. The URL box works anywhere,
+  including the PS3.</p></td></tr>
+<tr><th></th><td>
+  <input type="submit" value="Save" class="primary">
+  <a href="{{ url_for('disc_page', disc_id=disc.id) }}">Cancel</a></td></tr>
+</table>
+</form>
+{% endblock %}

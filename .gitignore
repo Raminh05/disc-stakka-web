@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# The venvs hold platform-specific binaries, including a darwin build of hid.so.
+.venv/
+.venv-py39/
+
+# The live catalogue, the session key, and the device traces. Real user data.
+# The suite does not need any of it: the one trace the calibration test reads is
+# committed separately under tests/fixtures/.
+/data/
+
+# Cover art arrives as a bind mount, never as a repo file.
+/static/art/

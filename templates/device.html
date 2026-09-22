@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Unit &mdash; Disc Stakka{% endblock %}
+{% block content %}
+<h1>The unit</h1>
+
+{% if error %}
+  <div class="strip error">{{ error }}</div>
+  <p>If the machine running this has slept, the unit re-enumerated on the USB
+  bus and this connection is stale. Reconnecting replaces it.</p>
+  <form method="post" action="{{ url_for('device_reconnect') }}">
+    <input type="submit" value="Reconnect to the unit" class="primary">
+  </form>
+{% endif %}
+
+{% if probe %}
+<table class="facts" cellspacing="0" cellpadding="0">
+<tr><th>Serial</th><td>{{ probe.serial }}</td></tr>
+<tr><th>Firmware</th><td>{{ probe.firmware }}</td></tr>
+<tr><th>Position</th><td>slot {{ probe.position }}</td></tr>
+<tr><th>Status</th><td><code>{{ probe.status }}</code></td></tr>
+</table>
+{% elif not error %}
+<p class="hint">No unit detected on the USB bus.</p>
+{% endif %}
+
+{% if not error %}
+<h2>Connection</h2>
+<form method="post" action="{{ url_for('device_reconnect') }}">
+  <input type="submit" value="Reconnect">
+  <span class="hint">Use after the host sleeps, if the unit stops responding.</span>
+</form>
+{% endif %}
+
+<h2>Reset</h2>
+<p>Clears any latched error, sets the light solid, and returns the carousel to
+home. Safe to run whenever the unit seems confused.</p>
+<form method="post" action="{{ url_for('device_reset') }}">
+  <input type="submit" value="Reset the unit" class="primary">
+</form>
+
+<h2>Status flags</h2>
+<table class="facts" cellspacing="0" cellpadding="0">
+<tr><th><code>BUSY</code></th><td>carousel is moving; the unit ignores commands</td></tr>
+<tr><th><code>DISC_WAITING</code></th><td>a disc is at the loading aperture</td></tr>
+<tr><th><code>DISC_IN_BAY</code></th><td>a disc is presented, waiting to be taken</td></tr>
+<tr><th><code>HOMED</code></th><td>carousel position is known; required before it will move to a slot</td></tr>
+</table>
+
+<h2>Recent activity</h2>
+{% if not events %}<p class="hint">Nothing yet.</p>{% else %}
+<table class="events" cellspacing="0" cellpadding="0">
+<tr><th>When</th><th>What</th><th>Slot</th><th>Disc</th></tr>
+{% for e in events %}
+<tr><td>{{ e.at.replace('T', ' ') }}</td><td>{{ e.kind }}</td>
+    <td>{{ e.slot if e.slot is not none else '' }}</td>
+    <td>{{ e.title or e.detail or '' }}</td></tr>
+{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

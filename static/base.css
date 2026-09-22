@@ -1,0 +1,190 @@
+/* Disc Stakka — baseline stylesheet.
+ *
+ * CSS 2.1 only. No flexbox, no grid, no custom properties, no rem, no media
+ * queries, no rgba() — NetFront on the PS3 predates all of it, and a colour
+ * function it cannot parse drops the whole declaration.
+ *
+ * Sized for a television at couch distance: large type, heavy weights, high
+ * contrast, and generous outer padding so nothing lands in a TV's overscan.
+ * Everything here degrades to readable even if the CSS is ignored entirely.
+ */
+
+body {
+    background: #14161a;
+    color: #e8e6e1;
+    font-family: "Trebuchet MS", Verdana, Geneva, sans-serif;
+    font-size: 18px;
+    line-height: 1.5;
+    margin: 0;
+    padding: 0;
+}
+
+a         { color: #ffb340; text-decoration: none; }
+a:hover   { text-decoration: underline; }
+code      { font-family: "Courier New", monospace; color: #9fd2ff; }
+
+h1 { font-size: 30px; margin: 0 0 12px 0; color: #fff; font-weight: bold; }
+h2 { font-size: 22px; margin: 28px 0 10px 0; color: #ffb340;
+     border-bottom: 1px solid #2b2f37; padding-bottom: 5px; }
+
+/* -- chrome ---------------------------------------------------------- */
+
+.bar          { background: #0d0f12; border-bottom: 2px solid #ffb340; }
+.bar td       { padding: 14px 32px; }
+.brand a      { color: #fff; font-size: 24px; font-weight: bold; }
+.nav          { text-align: right; }
+.nav a        { margin-left: 22px; font-size: 18px; }
+
+.page { padding: 24px 32px 40px 32px; }
+.foot { padding: 16px 32px 28px 32px; color: #6d7480; font-size: 14px;
+        border-top: 1px solid #22262d; }
+
+.strip        { padding: 12px 32px; font-size: 17px; border-bottom: 1px solid #22262d; }
+.strip.ok     { background: #15361f; color: #b7f0c6; }
+.strip.warn   { background: #3a2f14; color: #ffd98a; }
+.strip.error  { background: #3d1a1a; color: #ffb3b3; }
+.strip.busy   { background: #14293d; color: #a8d4ff; }
+.strip a      { color: inherit; text-decoration: underline; }
+
+/* -- catalogue grid --------------------------------------------------- */
+
+.search        { margin: 0 0 22px 0; }
+.search input, .search select {
+    font-size: 17px; padding: 6px; background: #1d2027;
+    color: #e8e6e1; border: 1px solid #383d47;
+}
+.search a      { margin-left: 12px; font-size: 16px; }
+
+.counts        { color: #8b939f; font-size: 16px; }
+
+/* Filter chips. Links, not a <select>, so one press on a game pad changes the
+   view and the current filter is legible from the sofa. */
+.filters       { margin: 0 0 12px 0; }
+.filters.consoles { margin-left: 26px; }
+.chip          { display: inline-block; margin: 0 8px 8px 0; padding: 5px 14px;
+                 background: #1d2027; border: 1px solid #383d47; color: #c4c8ce;
+                 font-size: 16px; }
+.chip:hover    { background: #2b313b; text-decoration: none; }
+.chip.on       { background: #ffb340; border-color: #ffb340; color: #14161a;
+                 font-weight: bold; }
+.chip.on:hover { background: #ffc669; }
+
+.grid .cell    { padding: 0 18px 26px 0; }
+.grid img      { display: block; border: 1px solid #2b2f37; background: #1d2027; }
+.grid .slot    { display: block; margin-top: 8px; color: #ffb340;
+                 font-size: 14px; font-weight: bold; letter-spacing: 1px; }
+.grid .name    { display: block; color: #fff; font-size: 18px; font-weight: bold; }
+.grid .sub     { display: block; color: #8b939f; font-size: 15px; }
+.grid .kind    { display: block; color: #6d7480; font-size: 14px;
+                 text-transform: uppercase; letter-spacing: 1px; }
+
+.noart         { display: block; width: 158px; height: 158px; line-height: 158px;
+                 text-align: center; background: #1d2027; border: 1px solid #2b2f37;
+                 color: #555c68; font-size: 14px; }
+.noart.big     { width: 200px; height: 200px; line-height: 200px; }
+
+.tag-out       { display: inline-block; margin-top: 4px; padding: 2px 8px;
+                 background: #6b2020; color: #ffd3d3; font-size: 13px;
+                 font-weight: bold; letter-spacing: 1px; }
+
+.views         { margin: 8px 0 0 0; }
+.views .chip   { margin: 0 0 0 8px; }
+
+.list th       { text-align: left; color: #8b939f; font-weight: normal; font-size: 15px;
+                 border-bottom: 1px solid #2b2f37; padding: 6px 18px 6px 0; }
+.list td       { padding: 9px 18px 9px 0; border-bottom: 1px solid #1d2027;
+                 vertical-align: top; color: #c4c8ce; }
+.list .slot    { width: 48px; color: #ffb340; font-weight: bold; letter-spacing: 1px; }
+.list .name    { color: #fff; font-weight: bold; }
+.list .sub     { display: block; color: #8b939f; font-size: 15px; }
+.list .tag-out { margin-top: 0; }
+.list .row-actions { text-align: right; white-space: nowrap; padding-right: 0; }
+.list .row-actions form  { display: inline; margin: 0; }
+.list .row-actions input { font-size: 15px; padding: 4px 12px; margin-left: 6px; }
+
+.fab-row       { text-align: right; margin: 24px 0 0 0; }
+.fab           { display: inline-block; width: 64px; height: 64px; line-height: 60px;
+                 text-align: center; background: #ffb340; color: #14161a;
+                 border: 2px solid #ffb340; font-size: 40px; font-weight: bold; }
+.fab:hover     { background: #ffc669; border-color: #ffc669; text-decoration: none; }
+.fab:focus     { outline: 3px solid #fff; }
+
+.pager         { margin-top: 18px; font-size: 18px; }
+.pager span    { margin: 0 16px; color: #8b939f; }
+.empty         { color: #8b939f; font-size: 19px; padding: 30px 0; }
+.crumb         { margin: 0 0 14px 0; font-size: 16px; }
+
+/* -- detail ----------------------------------------------------------- */
+
+.cover         { border: 1px solid #2b2f37; background: #1d2027; }
+.detail        { padding-left: 28px; }
+.detail .sub   { color: #8b939f; font-size: 19px; margin: 0 0 14px 0; }
+.notes         { color: #c4c8ce; margin: 16px 0; max-width: 34em; }
+
+.facts         { margin: 14px 0; }
+.facts th      { text-align: left; color: #8b939f; font-weight: normal;
+                 padding: 5px 22px 5px 0; vertical-align: top; }
+.facts td      { padding: 5px 0; }
+
+.actions td    { padding-right: 12px; }
+
+/* -- forms ------------------------------------------------------------ */
+
+.form th       { text-align: left; color: #8b939f; font-weight: normal;
+                 padding: 9px 20px 9px 0; vertical-align: top; }
+.form td       { padding: 9px 0; }
+input[type=text], textarea, select {
+    font-family: inherit; font-size: 17px; padding: 7px;
+    background: #1d2027; color: #e8e6e1; border: 1px solid #383d47;
+}
+input[type=submit] {
+    font-family: inherit; font-size: 17px; padding: 8px 20px;
+    background: #2b313b; color: #e8e6e1; border: 1px solid #4a5261;
+    cursor: pointer;
+}
+input.primary  { background: #ffb340; color: #14161a; border-color: #ffb340;
+                 font-weight: bold; }
+input.danger   { background: #2b313b; color: #ff9d9d; border-color: #5e3838; }
+.hint          { color: #8b939f; font-size: 15px; }
+
+/* -- job page --------------------------------------------------------- */
+
+.prompt        { background: #1c2b18; border: 3px solid #6ddc4f;
+                 padding: 34px; margin: 20px 0; text-align: center; }
+.shout         { font-size: 46px; font-weight: bold; color: #b9ff9e;
+                 margin: 0 0 14px 0; letter-spacing: 2px; }
+.countdown     { font-size: 26px; color: #fff; margin: 14px 0 0 0; }
+
+.working       { background: #1a1d23; border: 1px solid #2b2f37;
+                 padding: 26px; margin: 20px 0; }
+.shout-small   { font-size: 24px; color: #fff; margin: 0 0 8px 0; }
+
+.result        { padding: 24px; margin: 20px 0; font-size: 20px; }
+.result.ok     { background: #15361f; border: 2px solid #3f8b53; color: #d6ffe0; }
+.result.error  { background: #3d1a1a; border: 2px solid #8b3f3f; color: #ffd6d6; }
+.result p      { margin: 0; }
+
+.actions-row   { margin-top: 22px; }
+.bigbutton     { display: inline-block; padding: 13px 24px; margin: 0 12px 12px 0;
+                 background: #2b313b; border: 1px solid #4a5261; color: #e8e6e1;
+                 font-size: 18px; }
+.bigbutton:hover { background: #363d4a; text-decoration: none; }
+
+/* -- reconcile -------------------------------------------------------- */
+
+.slots td      { width: 44px; height: 40px; text-align: center;
+                 border: 1px solid #14161a; font-size: 15px; }
+.slot-free     { background: #1d2027; color: #555c68; }
+.slot-full     { background: #2f4a33; color: #d6ffe0; }
+.slot-out      { background: #5e3838; color: #ffd6d6; }
+.slots a       { color: inherit; font-weight: bold; }
+.legend        { font-size: 15px; color: #8b939f; margin-top: 10px; }
+.swatch        { display: inline-block; width: 20px; height: 14px;
+                 margin: 0 5px 0 18px; border: 1px solid #383d47; }
+
+.events        { width: 100%; margin-top: 10px; }
+.events th     { text-align: left; color: #8b939f; font-weight: normal;
+                 border-bottom: 1px solid #2b2f37; padding: 6px 14px 6px 0;
+                 font-size: 15px; }
+.events td     { padding: 6px 14px 6px 0; font-size: 15px; color: #c4c8ce;
+                 border-bottom: 1px solid #1d2027; }

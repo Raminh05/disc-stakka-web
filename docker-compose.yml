@@ -1,0 +1,71 @@
+services:
+  discstakka:
+    build:
+      context: .
+      # Override if the host account that owns ./data and ./art is not 1000.
+      args:
+        APP_UID: 1000
+        APP_GID: 1000
+    image: discstakka-web
+    # Pinning the name also means "docker compose up --scale" is an error rather
+    # than two processes fighting over one HID handle.
+    container_name: discstakka
+    # A restart empties the in-memory job registry, so a job page bookmarked
+    # before the restart answers 404. Don't restart while a job is running.
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    environment:
+      DISCSTAKKA_PORT: "5050"
+      # db.py timestamps rows with a naive datetime.now(), so an unset TZ writes
+      # UTC into a column the pages present as local time. Set it to the host's.
+      TZ: "America/Toronto"
+    volumes:
+      - ./data:/app/data
+      # Cover art only. Mounting all of static/ would hide base.css and
+      # modern.css and every page would lose its styling.
+      - ./art:/app/static/art
+      # The usbfs tree, not a single node: the unit re-enumerates when the host
+      # sleeps and comes back as a different device number, and a node created
+      # after the container started is invisible to it unless the host devtmpfs is
+      # shared. This grants visibility, not access - the cgroup rule and the
+      # node's own group are what permit it.
+      - /dev/bus/usb:/dev/bus/usb
+      - /run/udev:/run/udev:ro
+    # 189 is usb_device, a fixed major, so this needs no host lookup. It is still
+    # per-major: it permits every USB device on the host, so the udev rule's group
+    # on this unit's node is what narrows it to the carousel. That only holds
+    # while the app runs non-root.
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    # GID of the group in deploy/99-discstakka.rules.
+    group_add:
+      - "2718"
+    # usbfs is gated on write permission to the node, not on a capability, and
+    # port 5050 is unprivileged.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Python as PID 1 is never sent a default-action SIGTERM, so "compose stop"
+    # would stall until the timeout and then SIGKILL. tini at PID 1 fixes that,
+    # and SIGINT gives the server a clean shutdown.
+    init: true
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    # Deliberately "/" and not "/device": rendering /device opens the handle and
+    # talks to the unit, and raises Busy mid-job, so it would flap unhealthy
+    # exactly while the carousel works. Each probe still costs one hid.enumerate.
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/' % os.environ.get('DISCSTAKKA_PORT', '5050'), timeout=5)"]
+      interval: 60s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    # It runs for months at a time.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

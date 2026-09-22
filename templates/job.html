@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ job.title }} &mdash; Disc Stakka{% endblock %}
+
+{% block head %}
+{#
+  The whole PS3 story lives in this tag. NetFront has no usable AJAX, so the
+  page reloads itself until the job reaches a terminal phase, at which point the
+  tag is simply not emitted and the reloading stops. Prompting phases poll
+  faster so the "insert"/"take" transition is caught promptly.
+#}
+{% if not job.done %}
+<meta http-equiv="refresh" content="{% if job.prompting %}1{% else %}2{% endif %};url={{ url_for('job_page', job_id=job.id) }}">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<h1>{{ job.title }}</h1>
+
+{% if job.prompting %}
+
+  {# The user has to physically do something. Make it unmissable on a TV. #}
+  <div class="prompt">
+    <p class="shout">
+      {% if job.phase == 'awaiting_insert' %}INSERT THE DISC NOW{% else %}TAKE THE DISC{% endif %}
+    </p>
+    {% if job.phase == 'awaiting_insert' %}
+      <p>Feed it into the slot on the front of the unit.</p>
+    {% else %}
+      <p>It is waiting in the bay. If you leave it, the unit puts it back.</p>
+    {% endif %}
+    {% if job.remaining is not none %}
+      <p class="countdown" id="countdown">{{ job.remaining }} second{% if job.remaining != 1 %}s{% endif %} left</p>
+    {% endif %}
+  </div>
+
+{% elif job.done %}
+
+  <div class="result {{ 'ok' if job.ok else 'error' }}">
+    <p>{{ job.message }}</p>
+  </div>
+
+  <p class="actions-row">
+    {% if job.result.needs_details and job.result.disc_id %}
+      <a class="bigbutton" href="{{ url_for('disc_edit', disc_id=job.result.disc_id) }}">Name this disc</a>
+    {% elif job.result.disc_id %}
+      <a class="bigbutton" href="{{ url_for('disc_page', disc_id=job.result.disc_id) }}">View the disc</a>
+    {% endif %}
+    <a class="bigbutton" href="{{ url_for('index') }}">Back to the catalogue</a>
+    {% if not job.ok %}
+      <a class="bigbutton" href="{{ url_for('device_page') }}">Check the unit</a>
+    {% endif %}
+  </p>
+
+{% else %}
+
+  <div class="working">
+    <p class="shout-small">{{ job.message }}</p>
+    <p class="hint">This page refreshes itself. You do not need to do anything.</p>
+  </div>
+
+{% endif %}
+
+{# A no-JS, no-refresh escape hatch: some browsers let users disable meta
+   refresh entirely, and a stalled page with no way forward is a dead end. #}
+{% if not job.done %}
+<p class="hint">
+  Nothing happening? <a href="{{ url_for('job_page', job_id=job.id) }}">Reload manually</a>.
+</p>
+{% endif %}
+
+{% endblock %}

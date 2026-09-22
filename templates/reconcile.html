@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Reconcile &mdash; Disc Stakka{% endblock %}
+{% block content %}
+<h1>Reconcile</h1>
+<p>What the catalogue believes is in the unit. The carousel has no way to tell
+us what is really in a slot, so if the two drift apart, this is where you fix it.</p>
+
+<h2>Record a disc you loaded by hand</h2>
+<form method="post" action="{{ url_for('reconcile_manual') }}">
+<table class="form" cellspacing="0" cellpadding="0">
+<tr><th>Slot</th><td><input type="text" name="slot" size="5"></td></tr>
+<tr><th>Title</th><td><input type="text" name="title" size="30"></td></tr>
+<tr><th></th><td><input type="submit" value="Record it" class="primary">
+  <span class="hint">Nothing moves; this only writes to the catalogue.</span></td></tr>
+</table>
+</form>
+
+<h2>Slots</h2>
+<table class="slots" cellspacing="0" cellpadding="0">
+{% for chunk in slots|batch(10) %}
+<tr>
+  {% for slot, disc in chunk %}
+    <td class="{% if disc %}{% if disc.status == 'out' %}slot-out{% else %}slot-full{% endif %}{% else %}slot-free{% endif %}">
+      {% if disc %}<a href="{{ url_for('disc_page', disc_id=disc.id) }}"
+                      title="{{ disc.title }}">{{ slot }}</a>
+      {% else %}{{ slot }}{% endif %}
+    </td>
+  {% endfor %}
+</tr>
+{% endfor %}
+</table>
+<p class="legend">
+  <span class="swatch slot-free">&nbsp;</span> free
+  <span class="swatch slot-full">&nbsp;</span> occupied
+  <span class="swatch slot-out">&nbsp;</span> checked out (slot held)
+</p>
+{% endblock %}

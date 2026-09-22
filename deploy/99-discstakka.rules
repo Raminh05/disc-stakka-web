@@ -1,0 +1,13 @@
+# Imation Disc Stakka. Without this the usbfs node keeps its default root:root
+# ownership and the container's non-root user can enumerate the unit but never
+# open it - which the UI reports as "present, not connected" with no error.
+#
+# The rule is on the USB device, not on hidraw: the PyPI hidapi wheel's `hid`
+# module is the libusb backend, so the app opens /dev/bus/usb/<bus>/<dev>.
+#
+#   sudo groupadd -g 2718 discstakka
+#   sudo cp deploy/99-discstakka.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# The GID must match group_add in docker-compose.yml.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="0718", ATTR{idProduct}=="d000", MODE="0660", GROUP="discstakka"

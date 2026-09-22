@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Remove {{ disc.title }} &mdash; Disc Stakka{% endblock %}
+{% block content %}
+
+<p class="crumb"><a href="{{ back }}">&laquo; Back</a></p>
+<h1>Remove this disc from the catalogue?</h1>
+
+<table class="facts" cellspacing="0" cellpadding="0">
+  <tr><th>Title</th><td>{{ disc.title }}</td></tr>
+  <tr><th>Slot</th><td>{{ disc.slot }}</td></tr>
+</table>
+
+<p>The catalogue entry{% if disc.art_path %} and its cover art{% endif %} will be deleted.
+{% if disc.status == 'out' %}
+  The disc is checked out, so slot {{ disc.slot }} will stop being held for its return.
+{% else %}
+  The carousel will not move, so anything physically in slot {{ disc.slot }}
+  stays there, but the catalogue will list the slot as free.
+{% endif %}</p>
+
+<table cellspacing="0" cellpadding="0" class="actions"><tr>
+  <td><form method="post" action="{{ url_for('disc_delete', disc_id=disc.id) }}">
+    <input type="hidden" name="confirm" value="yes">
+    <input type="submit" value="Remove from catalogue" class="danger"></form></td>
+  <td><form method="get" action="{{ back }}">
+    <input type="submit" value="Cancel"></form></td>
+</tr></table>
+{% endblock %}

@@ -1,0 +1,4 @@
+Flask>=3.0
+Pillow>=10.0
+requests>=2.31
+hidapi>=0.14

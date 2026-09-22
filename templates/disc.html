@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ disc.title }} &mdash; Disc Stakka{% endblock %}
+{% block content %}
+
+<p class="crumb"><a href="{{ url_for('index') }}">&laquo; Catalogue</a></p>
+
+<table width="100%" cellspacing="0" cellpadding="0"><tr>
+<td width="220" valign="top">
+  {% if disc.art_path %}
+    <img src="{{ url_for('static', filename='art/' + disc.art_path + '_full.jpg') }}"
+         alt="" class="cover">
+  {% else %}
+    <div class="noart big">no art</div>
+  {% endif %}
+</td>
+<td valign="top" class="detail">
+  <h1>{{ disc.title }}</h1>
+  {% if disc.subtitle %}<p class="sub">{{ disc.subtitle }}</p>{% endif %}
+
+  <table class="facts" cellspacing="0" cellpadding="0">
+    <tr><th>Slot</th><td>{{ disc.slot }}</td></tr>
+    {% if disc.category %}
+      <tr><th>Category</th><td>
+        <a href="{{ url_for('index', category=disc.category) }}">{{ disc.category }}</a></td></tr>
+    {% endif %}
+    {% if disc.platform %}
+      <tr><th>Console</th><td>
+        <a href="{{ url_for('index', category=disc.category, platform=disc.platform) }}">{{ disc.platform }}</a></td></tr>
+    {% endif %}
+    <tr><th>Status</th><td>
+      {% if disc.status == 'out' %}
+        <strong class="tag-out">Checked out</strong>
+        {% if disc.checked_out_at %} since {{ disc.checked_out_at.replace('T', ' ') }}{% endif %}
+      {% else %}In the unit{% endif %}
+    </td></tr>
+  </table>
+
+  {% if disc.notes %}<p class="notes">{{ disc.notes }}</p>{% endif %}
+
+  <table cellspacing="0" cellpadding="0" class="actions"><tr>
+  {% if disc.status == 'out' %}
+    <td><form method="post" action="{{ url_for('disc_return', disc_id=disc.id) }}">
+      <input type="submit" value="Put this disc back" class="primary"></form></td>
+  {% else %}
+    <td><form method="post" action="{{ url_for('disc_eject', disc_id=disc.id) }}">
+      <input type="submit" value="Get this disc" class="primary"></form></td>
+  {% endif %}
+    <td><form method="get" action="{{ url_for('disc_edit', disc_id=disc.id) }}">
+      <input type="submit" value="Edit"></form></td>
+    <td><form method="get" action="{{ url_for('disc_delete', disc_id=disc.id) }}">
+      <input type="submit" value="Remove from catalogue" class="danger"></form></td>
+  </tr></table>
+</td>
+</tr></table>
+{% endblock %}

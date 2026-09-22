@@ -1,0 +1,90 @@
+/* Modern-only enhancements.
+ *
+ * Everything lives inside @supports. Per the CSS spec an unknown at-rule is
+ * skipped along with its entire block, so NetFront and friends never see any
+ * of this — while modern browsers get a real layout instead of the table grid.
+ *
+ * base.css must remain complete on its own. Nothing here may be load-bearing.
+ */
+
+@supports (display: grid) {
+    body {
+        font-size: 17px;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .page, .bar td, .strip, .foot {
+        padding-left: max(32px, env(safe-area-inset-left));
+        padding-right: max(32px, env(safe-area-inset-right));
+    }
+
+    /* The catalogue is a <table> for the PS3; on modern browsers turn the
+       same markup into a responsive grid. */
+    .grid, .grid tbody, .grid tr {
+        display: contents;
+    }
+    .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 26px 20px;
+    }
+    /* Undo the table's width="33%", which in a grid means a third of the track. */
+    .grid td { width: auto; }
+    .grid td:not(.cell) { display: none; }
+    .grid .cell { padding: 0; }
+    .grid img, .noart {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1 / 1;
+        object-fit: cover;
+        border-radius: 4px;
+        transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .grid .noart {
+        line-height: normal;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .grid a:hover img {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+    }
+
+    .fab-row { margin: 0; }
+    .fab {
+        position: fixed;
+        right: max(28px, env(safe-area-inset-right));
+        bottom: max(28px, env(safe-area-inset-bottom));
+        z-index: 10;
+        border-radius: 50%;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+        transition: background .12s ease, transform .12s ease;
+    }
+    .fab:hover { transform: translateY(-2px); }
+
+    input[type=text], textarea, select, input[type=submit], .bigbutton {
+        border-radius: 4px;
+    }
+    input[type=submit], .bigbutton { transition: background .12s ease; }
+
+    .prompt, .working, .result { border-radius: 6px; }
+
+    .cover { border-radius: 4px; max-width: 100%; height: auto; }
+
+    /* Gentle pulse on the two phases where the user must act. Purely
+       decorative — the text already says everything. */
+    @media (prefers-reduced-motion: no-preference) {
+        .prompt { animation: breathe 1.6s ease-in-out infinite; }
+    }
+    @keyframes breathe {
+        0%, 100% { border-color: #6ddc4f; }
+        50%      { border-color: #b9ff9e; }
+    }
+
+    @media (max-width: 640px) {
+        .nav a { margin-left: 14px; font-size: 16px; }
+        .brand a { font-size: 20px; }
+        .detail { padding-left: 0; }
+    }
+}

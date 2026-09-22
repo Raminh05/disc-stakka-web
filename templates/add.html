@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Add a disc &mdash; Disc Stakka{% endblock %}
+{% block content %}
+<h1>Add a disc</h1>
+
+{% if not free %}
+  <p class="empty">Every slot is spoken for. Remove something first.</p>
+{% else %}
+<p>Pick a slot. The carousel turns to it, then asks you to feed the disc in.
+You will name it afterwards.</p>
+
+<form method="post" action="{{ url_for('add') }}">
+<table class="form" cellspacing="0" cellpadding="0">
+<tr><th>Slot</th><td>
+  <select name="slot">
+    {% for s in free %}
+      <option value="{{ s }}"{% if s == suggested %} selected{% endif %}>Slot {{ s }}</option>
+    {% endfor %}
+  </select>
+  <span class="hint">{{ free|length }} free</span></td></tr>
+<tr><th></th><td>
+  <input type="submit" value="Start loading" class="primary"></td></tr>
+</table>
+</form>
+{% endif %}
+
+<p class="hint">Already put a disc in by hand?
+<a href="{{ url_for('reconcile') }}">Record it without moving the carousel</a>.</p>
+{% endblock %}

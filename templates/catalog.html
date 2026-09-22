@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Catalogue &mdash; Disc Stakka{% endblock %}
+{% block content %}
+
+<table width="100%" cellspacing="0" cellpadding="0"><tr>
+<td valign="top"><h1>Catalogue</h1></td>
+<td align="right" valign="top" class="counts">
+  {{ stats.total }} cataloged &middot; {{ stats.out }} out &middot; {{ stats.free }} slots free
+  <p class="views">
+    <a class="chip{% if view == 'covers' %} on{% endif %}"
+       href="{{ url_for('index', q=query, status=status, order=order, category=category, platform=platform, view='covers') }}">Covers</a>
+    <a class="chip{% if view == 'list' %} on{% endif %}"
+       href="{{ url_for('index', q=query, status=status, order=order, category=category, platform=platform, view='list') }}">List</a>
+  </p>
+</td>
+</tr></table>
+
+<p class="filters">
+  <a class="chip{% if not category %} on{% endif %}"
+     href="{{ url_for('index', q=query, status=status, order=order) }}">All ({{ stats.total }})</a>
+  {% for c in CATEGORIES %}
+    <a class="chip{% if category == c %} on{% endif %}"
+       href="{{ url_for('index', q=query, status=status, order=order, category=c) }}">{{ c }} ({{ category_counts.get(c, 0) }})</a>
+  {% endfor %}
+</p>
+
+{% if category == GAMES and platform_counts %}
+<p class="filters consoles">
+  <a class="chip{% if not platform %} on{% endif %}"
+     href="{{ url_for('index', q=query, status=status, order=order, category=category) }}">Every console</a>
+  {% for p in PLATFORMS %}{% if platform_counts.get(p) %}
+    <a class="chip{% if platform == p %} on{% endif %}"
+       href="{{ url_for('index', q=query, status=status, order=order, category=category, platform=p) }}">{{ p }} ({{ platform_counts[p] }})</a>
+  {% endif %}{% endfor %}
+</p>
+{% endif %}
+
+<form method="get" action="{{ url_for('index') }}" class="search">
+  <input type="text" name="q" value="{{ query }}" size="18">
+  {# Searching from inside a category stays inside it. #}
+  {% if category %}<input type="hidden" name="category" value="{{ category }}">{% endif %}
+  {% if platform %}<input type="hidden" name="platform" value="{{ platform }}">{% endif %}
+  <select name="status">
+    <option value="">All discs</option>
+    <option value="stored"{% if status == 'stored' %} selected{% endif %}>In the unit</option>
+    <option value="out"{% if status == 'out' %} selected{% endif %}>Checked out</option>
+  </select>
+  <select name="order">
+    <option value="slot"{% if order == 'slot' %} selected{% endif %}>By slot</option>
+    <option value="title"{% if order == 'title' %} selected{% endif %}>By title</option>
+  </select>
+  <input type="submit" value="Search">
+  {% if query or status or category %}<a href="{{ url_for('index') }}">Clear</a>{% endif %}
+</form>
+
+{% if not discs %}
+  <p class="empty">
+    {% if query or status or category %}Nothing matches that.
+    {% else %}Nothing catalogued yet. <a href="{{ url_for('add') }}">Add a disc</a>.{% endif %}
+  </p>
+{% elif view == 'list' %}
+
+<table class="list" width="100%" cellspacing="0" cellpadding="0">
+<tr><th>Slot</th><th>Title</th><th>Category</th><th>Console</th><th>Status</th><th>&nbsp;</th></tr>
+{% for disc in discs %}
+<tr>
+  <td class="slot">{{ "%02d"|format(disc.slot) }}</td>
+  <td>
+    <a class="name" href="{{ url_for('disc_page', disc_id=disc.id) }}">{{ disc.title }}</a>
+    {% if disc.subtitle %}<span class="sub">{{ disc.subtitle }}</span>{% endif %}
+  </td>
+  <td>{{ disc.category or '&mdash;'|safe }}</td>
+  <td>{{ disc.platform or '&mdash;'|safe }}</td>
+  <td>
+    {% if disc.status == 'out' %}
+      <span class="tag-out">CHECKED OUT</span>
+      {% if disc.checked_out_at %}<span class="sub">since {{ disc.checked_out_at[:10] }}</span>{% endif %}
+    {% else %}In the unit{% endif %}
+  </td>
+  <td class="row-actions">
+    {% if disc.status == 'out' %}
+      <form method="post" action="{{ url_for('disc_return', disc_id=disc.id) }}"><input type="submit" value="Put back"></form>
+    {% else %}
+      <form method="post" action="{{ url_for('disc_eject', disc_id=disc.id) }}"><input type="submit" value="Eject"></form>
+    {% endif %}
+    <form method="get" action="{{ url_for('disc_edit', disc_id=disc.id) }}"><input type="submit" value="Edit"></form>
+    <form method="get" action="{{ url_for('disc_delete', disc_id=disc.id) }}"><input type="hidden" name="from" value="list"><input type="submit" value="Delete" class="danger"></form>
+  </td>
+</tr>
+{% endfor %}
+</table>
+
+{% else %}
+
+<table class="grid" width="100%" cellspacing="0" cellpadding="0">
+{% for row in discs|batch(3) %}
+<tr>
+  {% for disc in row %}
+  <td class="cell" width="33%" valign="top">
+    <a href="{{ url_for('disc_page', disc_id=disc.id) }}">
+      {% if disc.art_path %}
+        <img src="{{ url_for('static', filename='art/' + disc.art_path + '_thumb.jpg') }}"
+             width="160" height="160" alt="">
+      {% else %}
+        <span class="noart">no art</span>
+      {% endif %}
+      <span class="slot">{{ "%02d"|format(disc.slot) }}</span>
+      <span class="name">{{ disc.title }}</span>
+    </a>
+    {% if disc.subtitle %}<span class="sub">{{ disc.subtitle }}</span>{% endif %}
+    {% if disc.category %}<span class="kind">{{ disc.platform or disc.category }}</span>{% endif %}
+    {% if disc.status == 'out' %}<span class="tag-out">CHECKED OUT</span>{% endif %}
+  </td>
+  {% endfor %}
+  {% for _ in range(3 - row|length) %}<td width="33%">&nbsp;</td>{% endfor %}
+</tr>
+{% endfor %}
+</table>
+
+{% endif %}
+
+{% if discs and pages > 1 %}
+<p class="pager">
+  {% if page > 1 %}
+    <a href="{{ url_for('index', page=page-1, q=query, status=status, order=order, category=category, platform=platform) }}">&laquo; Previous</a>
+  {% endif %}
+  <span>Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}
+    <a href="{{ url_for('index', page=page+1, q=query, status=status, order=order, category=category, platform=platform) }}">Next &raquo;</a>
+  {% endif %}
+</p>
+{% endif %}
+
+<p class="fab-row">
+  <a class="fab" href="{{ url_for('add') }}" title="Add a disc" aria-label="Add a disc">+</a>
+</p>
+{% endblock %}

@@ -1,0 +1,16 @@
+# The venvs hold macOS-specific binaries, including a darwin build of hid.so.
+.venv
+.venv-py39
+__pycache__
+**/__pycache__
+.DS_Store
+
+# The live catalogue and cover art arrive as bind mounts, never as image layers.
+data
+static/art
+
+# Host-side or macOS-only files.
+deploy
+flake.nix
+run.sh
+*.md
