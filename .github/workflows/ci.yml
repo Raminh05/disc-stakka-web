@@ -110,6 +110,32 @@ jobs:
       - name: Run tests
         run: .venv/bin/python -m unittest discover -s tests -t . -v
 
+  nix:
+    name: Nix dev shell
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v23
+
+      # --all-systems because evaluation is the point: a system in the list that
+      # nixpkgs no longer supports fails here rather than on someone's machine.
+      # That is how the stale x86_64-darwin entry was found. --no-build because
+      # a Linux runner cannot build the darwin shell and does not need to.
+      - name: Flake evaluates for every declared system
+        run: nix flake check --all-systems --no-build
+
+      # The shell existing is not the same as it working. This is the
+      # documented workflow: toolchain from nix, packages from uv.lock.
+      - name: The shell runs the suite
+        run: |
+          nix develop --command sh -c '
+            uv sync --frozen
+            uv run --frozen python -m unittest discover -s tests -t .
+          '
+
   container:
     name: Container image
     needs: lint

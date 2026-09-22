@@ -33,7 +33,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
 | `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
 | `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
-| `.github/workflows/ci.yml` | Suite, suite-without-hidapi, and the image build |
+| `.github/workflows/ci.yml` | Ruff, suite, suite-without-hidapi, nix shell, image |
 | `Dockerfile` | Container image, Linux hosts only; installs from `uv.lock` |
 | `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
 | `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
