@@ -2,19 +2,6 @@
 # keeps running app.py natively.
 FROM python:3.14-slim AS build
 
-# hidapi has no wheel for every interpreter, and pip then builds it from the
-# sdist: that needs a compiler, Python headers, and libusb plus libudev. The same
-# goes for Pillow and libjpeg/zlib. None of it belongs in the runtime image.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        python3-dev \
-        pkg-config \
-        libusb-1.0-0-dev \
-        libudev-dev \
-        libjpeg-dev \
-        zlib1g-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 # Pinned like any other build input. Upgrading uv is a deliberate act.
 COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /bin/uv
 
@@ -26,8 +13,15 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
+# --no-build: every locked dependency is either pure Python or ships a cp314
+# manylinux wheel for x86_64 and aarch64, so there is no compiler, no Python
+# headers and no libusb/libjpeg dev packages in this stage. If a future version
+# bump lands on something without a wheel, this fails here saying so, rather
+# than quietly compiling from an sdist. Putting build-essential, python3-dev,
+# pkg-config, libusb-1.0-0-dev, libudev-dev, libjpeg-dev and zlib1g-dev back is
+# the fix if that day comes.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-build
 
 ENV PATH=/opt/venv/bin:$PATH
 
@@ -50,12 +44,10 @@ RUN so="$(python -c 'import hid; print(hid.__file__)')" \
 
 FROM python:3.14-slim
 
-# The manylinux wheel vendors its own libusb and libudev, so this matters only on
-# the sdist path - where leaving it out is an ImportError on the first boot.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        libusb-1.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-
+# No libusb package here either. The manylinux wheel vendors its own, renamed by
+# auditwheel, and ldd on hid's .so resolves libusb and libudev inside
+# site-packages/hidapi.libs - nothing system-wide. That used to matter on the
+# sdist path, which --no-build in the build stage has closed off.
 COPY --from=build /opt/venv /opt/venv
 ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1
