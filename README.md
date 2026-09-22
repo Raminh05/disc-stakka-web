@@ -5,9 +5,8 @@ Stakka USB CD carousel. Browse a catalogue, ask for a disc and the carousel
 ejects it, add new discs and it takes them in — from any browser, including the
 PlayStation 3's.
 
-Built on the protocol work in `../disc-stakka-ctl-0.04`, whose
-`src/standalone/discstakka.c` remains the reference implementation and the
-bench diagnostic tool.
+Built on the protocol work of the **Disc Stakka Controller for Linux**
+project. See [Prior work](#prior-work).
 
 ## Running it
 
@@ -257,6 +256,30 @@ Existing databases migrate on startup (`db._migrate`). `media_type` becomes
 `category` + `platform`; only *Data* carries over, as *Software*. CD, DVD and
 Blu-ray said nothing about content, so those discs arrive unclassified rather
 than guessed at.
+
+## Prior work
+
+None of this would exist without **Disc Stakka Controller for Linux** by Eddie
+Cornejo, released in 2005 under the GPL:
+
+> <https://disc-stakka-ctl.sourceforge.net>
+
+Imation never published a protocol. Cornejo put a USB protocol analyser on the
+wire and worked it out: the report sizes and packet layout, the opcodes, the
+status bits, the message-ID pairing, and the 50 ms poll the unit demands before
+it resets itself. `discstakka/protocol.py` here is a port of that work, by way
+of the 0.04 tarball's `src/standalone/discstakka.c` and its `readme.txt`, and
+the constants in `tests/fake_device.py` are written out from the same source.
+
+Two things in the 0.03 `README` are still the best description of failures this
+code has to handle twenty years later: the unit resetting itself roughly every
+2.5 seconds when nothing polls it, and it accepting a CD and then ejecting it
+again when the host does not say what to do quickly enough. The second is the
+whole reason `ingest()` waits before sending `0x1D`.
+
+What this project adds is a catalogue, a web interface old browsers can use,
+and the four rules under *Protocol notes worth keeping*, which are not in the
+2005 sources.
 
 ## Keeping the catalogue honest
 
