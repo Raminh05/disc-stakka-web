@@ -16,23 +16,42 @@ from flask import (Flask, abort, flash, redirect, render_template, request,
                    session, url_for)
 
 from catalog import art, db, taxonomy
-from discstakka import device, jobs
+from config import Config
+from discstakka import device, flows, jobs
 from discstakka.protocol import DeviceError
 from discstakka.slots import SLOT_MAX, SLOT_MIN
-
-HERE = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = art.MAX_BYTES + (1 << 20)
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 
-controller = device.DeviceController()
+#: Set by create_app. There is exactly one of each per process, which is the
+#: same constraint that stops this app running under a multi-worker server.
+config = None
+controller = None
 
 
-def _secret_key():
+def create_app(cfg=None, ctrl=None):
+    """Wire the application up and return it.
+
+    Importing this module does nothing but define routes. Everything with a
+    side effect - creating the data directory, the secret key, the database and
+    the device controller - happens here, so a test or tools/fakerun.py can
+    point the whole application somewhere harmless.
+    """
+    global config, controller
+    config = cfg if cfg is not None else Config()
+    os.makedirs(config.data_dir, exist_ok=True)
+    app.secret_key = _secret_key(config.secret_key_path)
+    db.init(config.db_path)
+    controller = ctrl if ctrl is not None else device.DeviceController(
+        db_path=config.db_path, trace_dir=config.trace_dir)
+    return app
+
+
+def _secret_key(path):
     """Persist a key so sessions (and therefore flash messages) survive a
     restart. Regenerating each boot would log everyone out mid-job."""
-    path = os.path.join(HERE, "data", "secret_key")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if not os.path.exists(path):
         with open(path, "wb") as fh:
@@ -42,14 +61,10 @@ def _secret_key():
         return fh.read()
 
 
-app.secret_key = _secret_key()
-db.init()
-
-
 # -- helpers -------------------------------------------------------------
 
 def conn():
-    return db.connect()
+    return db.connect(config.db_path)
 
 
 @app.context_processor
@@ -233,7 +248,7 @@ def disc_eject(disc_id):
                        disc_id=disc_id, slot=disc["slot"])
     finally:
         c.close()
-    return start_job(job, device.run_eject, disc_id)
+    return start_job(job, flows.run_eject, disc_id)
 
 
 @app.route("/disc/<int:disc_id>/return", methods=["POST"])
@@ -251,7 +266,7 @@ def disc_return(disc_id):
                        disc_id=disc_id, slot=disc["slot"])
     finally:
         c.close()
-    return start_job(job, device.run_add, disc["slot"], disc_id)
+    return start_job(job, flows.run_add, disc["slot"], disc_id)
 
 
 @app.route("/add", methods=["GET", "POST"])
@@ -271,7 +286,7 @@ def add():
                 flash("Slot %d is already spoken for." % slot, "error")
                 return see_other(url_for("add"))
             job = jobs.Job("add", "Load a disc into slot %d" % slot, slot=slot)
-            return start_job(job, device.run_add, slot)
+            return start_job(job, flows.run_add, slot)
 
         return render_template("add.html", free=db.free_slots(c),
                                suggested=db.next_free_slot(c))
@@ -326,7 +341,7 @@ def device_reconnect():
 
 @app.route("/device/reset", methods=["POST"])
 def device_reset():
-    return start_job(jobs.Job("reset", "Reset the unit"), device.run_reset)
+    return start_job(jobs.Job("reset", "Reset the unit"), flows.run_reset)
 
 
 # -- reconcile -----------------------------------------------------------
@@ -399,5 +414,5 @@ if __name__ == "__main__":
     #
     # Not port 5000: on macOS that belongs to Control Center's AirPlay
     # Receiver, which answers every request with a bare 403.
-    port = int(os.environ.get("DISCSTAKKA_PORT", "5050"))
-    app.run(host="0.0.0.0", port=port, threaded=True, debug=False)
+    created = create_app()
+    created.run(host="0.0.0.0", port=config.port, threaded=True, debug=False)

@@ -9,10 +9,11 @@ import sqlite3
 from datetime import datetime
 
 from catalog import taxonomy
+from config import Config
 from discstakka.slots import SLOT_MAX, SLOT_MIN
 
-DEFAULT_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "catalog.db")
+#: Only a fallback: the application passes an explicit path from its Config.
+DEFAULT_PATH = Config().db_path
 
 STORED = "stored"
 OUT = "out"

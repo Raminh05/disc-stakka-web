@@ -12,7 +12,9 @@ import tempfile
 import unittest
 
 from catalog import db
-from discstakka import device, jobs, protocol
+from discstakka import device, flows, jobs, protocol
+from discstakka import trace as trace_module
+from discstakka.trace import Trace
 from tests import fake_device as fake
 from tests.clock import virtual_clock
 
@@ -50,16 +52,13 @@ class FlowTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.tmp, True)
 
         self.traces = os.path.join(self.tmp, "traces")
-        patched = device.TRACE_DIR
-        device.TRACE_DIR = self.traces
-        self.addCleanup(setattr, device, "TRACE_DIR", patched)
 
         self.db_path = os.path.join(self.tmp, "catalog.db")
         db.init(self.db_path)
         self.conn = db.connect(self.db_path)
         self.addCleanup(self.conn.close)
 
-        ctx = virtual_clock(protocol, device)
+        ctx = virtual_clock(protocol, flows, trace_module)
         self.clock = ctx.__enter__()
         self.addCleanup(ctx.__exit__, None, None, None)
 
@@ -90,6 +89,9 @@ class FlowTest(unittest.TestCase):
                 actions[phase](at_ms=self.clock.ms + when[phase])
 
         job.set_phase = record
+        job.trace = Trace(self.traces, job)
+        self.addCleanup(job.trace.close)
+        self.ds.trace = job.trace.status
         return job
 
     def disc(self, slot, title="Test disc", status=db.STORED):
@@ -113,7 +115,7 @@ class Reset(FlowTest):
         # wait means a latched error stops the only thing that would clear it.
         job = self.job("reset", "Reset the unit")
         self.unit.ack_timeout = True
-        device.run_reset(self.ds, self.conn, job)
+        flows.run_reset(self.ds, self.conn, job, job.trace)
 
         sent = [c for c, _ in self.unit.log]
         first_wait = sent.index(fake.CMD_SET_LED)
@@ -123,7 +125,7 @@ class Reset(FlowTest):
 
     def test_parks_at_home_and_succeeds(self):
         job = self.job("reset", "Reset the unit")
-        device.run_reset(self.ds, self.conn, job)
+        flows.run_reset(self.ds, self.conn, job, job.trace)
         self.assertEqual(self.unit.position, protocol.HOME)
         self.assertTrue(job.snapshot()["ok"])
 
@@ -132,7 +134,7 @@ class Add(FlowTest):
     def test_a_disc_goes_in_and_is_catalogued(self):
         job = self.job("add", "Load a disc into slot 5", slot=5,
                        when={jobs.AWAITING_INSERT: 3_000})
-        device.run_add(self.ds, self.conn, job, 5)
+        flows.run_add(self.ds, self.conn, job, job.trace, 5)
 
         snap = job.snapshot()
         self.assertTrue(snap["ok"], snap["message"])
@@ -148,7 +150,7 @@ class Add(FlowTest):
 
     def test_nothing_inserted_leaves_the_catalogue_alone(self):
         job = self.job("add", "Load a disc into slot 9", slot=9)
-        device.run_add(self.ds, self.conn, job, 9)
+        flows.run_add(self.ds, self.conn, job, job.trace, 9)
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
@@ -172,7 +174,7 @@ class Add(FlowTest):
             return real_handle(msgid, cmd, args)
 
         self.unit.handle = watch
-        device.run_add(self.ds, self.conn, job, 2)
+        flows.run_add(self.ds, self.conn, job, job.trace, 2)
 
         self.assertTrue(job.snapshot()["ok"])
         self.assertTrue(busy_at_accept, "0x1D was never sent")
@@ -197,7 +199,7 @@ class Add(FlowTest):
         db.mark_out(self.conn, disc_id)
         job = self.job("return", "Return Ico to slot 12", disc_id=disc_id, slot=12,
                        when={jobs.AWAITING_INSERT: 2_000})
-        device.run_add(self.ds, self.conn, job, 12, disc_id)
+        flows.run_add(self.ds, self.conn, job, job.trace, 12, disc_id)
 
         snap = job.snapshot()
         self.assertTrue(snap["ok"], snap["message"])
@@ -208,12 +210,13 @@ class Add(FlowTest):
     def test_the_run_is_traced(self):
         job = self.job("add", "Load a disc into slot 1", slot=1,
                        when={jobs.AWAITING_INSERT: 2_000})
-        device.run_add(self.ds, self.conn, job, 1)
+        flows.run_add(self.ds, self.conn, job, job.trace, 1)
 
         with open(self.only_trace()) as fh:
             body = fh.read()
+        # "end" is the controller's, not the flow's; see ControllerTest.
         for marker in ("move to slot 1", "awaiting insert", "disc seen",
-                       "0x1D acknowledged", "parked", "end"):
+                       "0x1D acknowledged", "parked"):
             self.assertIn(marker, body)
 
     def test_the_simulated_run_matches_a_captured_one(self):
@@ -221,7 +224,7 @@ class Add(FlowTest):
         # simulator drifts from the hardware, this is what notices.
         job = self.job("add", "Load a disc into slot 4", slot=4,
                        when={jobs.AWAITING_INSERT: 4_000})
-        device.run_add(self.ds, self.conn, job, 4)
+        flows.run_add(self.ds, self.conn, job, job.trace, 4)
 
         captured = signature(os.path.join(FIXTURES, "add-1789349798-4.log"))
         self.assertEqual(signature(self.only_trace()), captured)
@@ -236,7 +239,7 @@ class Eject(FlowTest):
     def test_a_disc_is_presented_and_taken(self):
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18,
                        when={jobs.PRESENTED: 1_500})
-        device.run_eject(self.ds, self.conn, job, self.disc_id)
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
         snap = job.snapshot()
         self.assertTrue(snap["ok"], snap["message"])
@@ -250,7 +253,7 @@ class Eject(FlowTest):
     def test_an_empty_slot_is_reported_as_drift(self):
         self.unit.occupied.discard(18)
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
-        device.run_eject(self.ds, self.conn, job, self.disc_id)
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
@@ -260,7 +263,7 @@ class Eject(FlowTest):
 
     def test_a_disc_left_in_the_bay_is_put_back(self):
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
-        device.run_eject(self.ds, self.conn, job, self.disc_id)  # nobody takes it
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)  # nobody takes it
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
@@ -273,23 +276,24 @@ class Eject(FlowTest):
     def test_a_missing_disc_is_not_a_hardware_error(self):
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
         db.delete_disc(self.conn, self.disc_id)
-        device.run_eject(self.ds, self.conn, job, self.disc_id)
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
         self.assertIn("no longer in the catalogue", job.snapshot()["error"])
 
 
 class ControllerTest(FlowTest):
     def controller(self):
-        return device.DeviceController(ds=self.ds, db_path=self.db_path)
+        return device.DeviceController(ds=self.ds, db_path=self.db_path,
+                                       trace_dir=self.traces)
 
     def test_one_job_at_a_time(self):
         control = self.controller()
         first = jobs.Job("reset", "Reset the unit")
-        control.submit(first, lambda ds, conn, job: job.succeed("done")
+        control.submit(first, lambda ds, conn, job, trace: job.succeed("done")
                        if self.block.wait(5) else None)
         try:
             with self.assertRaises(device.Busy) as caught:
                 control.submit(jobs.Job("reset", "Reset again"),
-                               lambda ds, conn, job: job.succeed("done"))
+                               lambda ds, conn, job, trace: job.succeed("done"))
             self.assertIs(caught.exception.job, first)
         finally:
             self.block.set()
@@ -299,7 +303,7 @@ class ControllerTest(FlowTest):
         control = self.controller()
         job = jobs.Job("reset", "Reset the unit")
 
-        def pull_the_plug(ds, conn, job):
+        def pull_the_plug(ds, conn, job, trace):
             self.io.unplug()
             ds.status()
 
@@ -310,9 +314,17 @@ class ControllerTest(FlowTest):
     def test_a_runner_that_reports_nothing_still_ends_the_job(self):
         control = self.controller()
         job = jobs.Job("reset", "Reset the unit")
-        control.submit(job, lambda ds, conn, job: None)
+        control.submit(job, lambda ds, conn, job, trace: None)
         self.wait_for(job)
         self.assertIn("without reporting a result", job.snapshot()["error"])
+
+    def test_the_trace_is_closed_off_even_when_a_job_fails(self):
+        control = self.controller()
+        job = jobs.Job("reset", "Reset the unit")
+        control.submit(job, lambda ds, conn, job, trace: 1 / 0)
+        self.wait_for(job)
+        with open(self.only_trace()) as fh:
+            self.assertIn("-- end", fh.read())
 
     def test_info_never_raises_and_reports_the_simulated_unit(self):
         control = self.controller()
