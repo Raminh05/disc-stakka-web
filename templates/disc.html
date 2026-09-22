@@ -7,7 +7,7 @@
 <table width="100%" cellspacing="0" cellpadding="0"><tr>
 <td width="220" valign="top">
   {% if disc.art_path %}
-    <img src="{{ url_for('static', filename='art/' + disc.art_path + '_full.jpg') }}"
+    <img src="{{ url_for('cover_art', filename=disc.art_path + '_full.jpg') }}"
          alt="" class="cover">
   {% else %}
     <div class="noart big">no art</div>

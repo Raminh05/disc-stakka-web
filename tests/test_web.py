@@ -5,6 +5,8 @@ tag while a job runs, GET-vs-POST on each route - none of which could be
 exercised before, because /device and every job page need a carousel.
 """
 
+import io
+import os
 import re
 import shutil
 import tempfile
@@ -28,7 +30,12 @@ class WebTest(unittest.TestCase):
         self.unit = self.io.carousel
         self.ds = protocol.DiscStakka(self.io)
 
-        config = Config(data_dir=self.tmp)
+        # art_dir does not follow data_dir - it has to match what Flask
+        # serves - so it is isolated explicitly or the suite writes cover art
+        # into the real static/art.
+        self.config = config = Config(
+            data_dir=self.tmp, art_dir=os.path.join(self.tmp, "art")
+        )
         self.controller = device.DeviceController(
             ds=self.ds, db_path=config.db_path, trace_dir=config.trace_dir
         )
@@ -156,6 +163,54 @@ class Jobs(WebTest):
         self.assertEqual(response.status_code, 303)
         self.assertTrue(response.headers["Location"].endswith("/"))
         self.assertEqual(self.client.get("/job/nope.json").status_code, 404)
+
+
+class CoverArt(WebTest):
+    """Art is user data, not a shipped asset.
+
+    Nothing covered this before, which is how it twice came close to being
+    written somewhere the browser could not fetch it from.
+    """
+
+    def a_png(self):
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new("RGB", (80, 80), (180, 40, 40)).save(buf, "PNG")
+        return buf.getvalue()
+
+    def test_stored_under_the_configured_directory_and_served_back(self):
+        from discstakka.catalog import art
+
+        stem = art.store(self.a_png(), directory=self.config.art_dir)
+
+        for suffix in ("thumb", "full"):
+            path = os.path.join(self.config.art_dir, "%s_%s.jpg" % (stem, suffix))
+            self.assertTrue(os.path.exists(path), path)
+            response = self.client.get("/art/%s_%s.jpg" % (stem, suffix))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.mimetype, "image/jpeg")
+
+        # Baseline JPEG, never progressive: the PS3 renders one and not the other.
+        with open(os.path.join(self.config.art_dir, "%s_full.jpg" % stem), "rb") as fh:
+            self.assertNotIn(b"\xff\xc2", fh.read(), "progressive JPEG")
+
+    def test_nothing_is_written_inside_the_package(self):
+        # The installed tree is read-only under nix, so art must not land there
+        # when a directory is configured. Compared before and after rather than
+        # asserted empty: a real install has art in it already.
+        from discstakka.catalog import art
+
+        shipped = os.path.join(os.path.dirname(app_module.__file__), "static", "art")
+        before = sorted(os.listdir(shipped)) if os.path.isdir(shipped) else []
+        art.store(self.a_png(), directory=self.config.art_dir)
+        after = sorted(os.listdir(shipped)) if os.path.isdir(shipped) else []
+        self.assertEqual(before, after, "art landed in the shipped static folder")
+
+    def test_the_route_refuses_to_escape_the_directory(self):
+        self.assertIn(
+            self.client.get("/art/..%2f..%2fcatalog.db").status_code, (404, 400)
+        )
 
 
 def _Stub():

@@ -15,9 +15,10 @@ DEFAULT_DATA = os.path.join(ROOT, "data")
 
 
 class Config(object):
-    def __init__(self, data_dir=None, port=None):
+    def __init__(self, data_dir=None, port=None, art_dir=None):
         self.data_dir = data_dir or os.environ.get("DISCSTAKKA_DATA") or DEFAULT_DATA
         self.port = int(port or os.environ.get("DISCSTAKKA_PORT", "5050"))
+        self._art_dir = art_dir
 
     @property
     def db_path(self):
@@ -33,9 +34,16 @@ class Config(object):
 
     @property
     def art_dir(self):
-        """Cover art, which lives under static/ rather than in the data dir.
+        """Where cover art is written, and served from.
 
-        Flask serves it from there and docker-compose.yml mounts it there, so it
-        cannot follow DISCSTAKKA_DATA without the browser losing every image.
+        Defaults beside the shipped static files, which is where
+        docker-compose.yml mounts it. DISCSTAKKA_ART moves it, which an install
+        whose code sits somewhere read-only - a nix store path, say - has to do.
+        It is served by its own route rather than as a static file precisely so
+        it does not have to live inside the package.
         """
-        return os.path.join(ROOT, "static", "art")
+        return (
+            self._art_dir
+            or os.environ.get("DISCSTAKKA_ART")
+            or os.path.join(ROOT, "static", "art")
+        )
