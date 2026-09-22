@@ -17,7 +17,8 @@ from flask import (Flask, abort, flash, redirect, render_template, request,
 
 from catalog import art, db, taxonomy
 from discstakka import device, jobs
-from discstakka.protocol import SLOT_MAX, SLOT_MIN, DeviceError
+from discstakka.protocol import DeviceError
+from discstakka.slots import SLOT_MAX, SLOT_MIN
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

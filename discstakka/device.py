@@ -18,8 +18,7 @@ import traceback
 from catalog import db
 
 from . import jobs
-from .protocol import (DiscStakka, DeviceError, HOME, NotConnected, SLOT_MAX,
-                       SLOT_MIN, describe_status)
+from .protocol import DiscStakka, DeviceError, NotConnected, describe_status
 
 TRACE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "traces")
@@ -89,7 +88,7 @@ class DeviceController(object):
         """Header/status summary. Never raises - the UI must render regardless."""
         job = self.current
         out = {
-            "present": DiscStakka.present(),
+            "present": self._ds.present(),
             "connected": self._ds.connected,
             "serial": None,
             "firmware": None,

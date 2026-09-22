@@ -19,12 +19,10 @@ real bug before it became a rule, so none of them should be "simplified" away:
 """
 
 import time
-from typing import Callable, List, Optional
+from typing import Callable, Optional
 
-import hid
-
-VID = 0x0718
-PID = 0xD000
+from .slots import HOME, SLOT_MAX, SLOT_MIN
+from .transport import PID, VID, HidTransport
 
 # Command codes (readme.txt; DiscStakka.py:14-22)
 CMD_REQUEST_STATE = 0x01
@@ -60,10 +58,6 @@ POLL_MS = 100
 NOW_MS = 500  # "check the current state once"
 INSERT_WINDOW_MS = 30_000  # DiscStakka.py:166
 TAKE_WINDOW_MS = 5_000  # DiscStakka.py:278
-
-SLOT_MIN = 1
-SLOT_MAX = 100
-HOME = 0
 
 Progress = Optional[Callable[[str], None]]
 
@@ -123,8 +117,9 @@ class DiscStakka(object):
     see :mod:`discstakka.device`.
     """
 
-    def __init__(self):
-        self._dev = None
+    def __init__(self, transport=None):
+        self._io = transport if transport is not None else HidTransport()
+        self._open = False
         self.unit = 0
         self.serial = None
         self.firmware = None
@@ -135,26 +130,17 @@ class DiscStakka(object):
     # -- connection ------------------------------------------------------
 
     def open(self, attempts=3):
-        if self._dev is not None:
+        if self._open:
             return
-
-        # Refresh hidapi's device list. After a sleep/wake cycle the cached
-        # entry points at a device that no longer exists, and every open on
-        # this handle fails forever even though the unit is healthy.
-        try:
-            hid.enumerate(VID, PID)
-        except Exception:
-            pass
 
         last = None
         for attempt in range(attempts):
-            dev = hid.device()
             try:
-                dev.open(VID, PID)
+                self._io.open()
             except (IOError, OSError) as exc:
                 last = exc
             else:
-                self._dev = dev
+                self._open = True
                 try:
                     self._handshake()
                     return
@@ -173,34 +159,26 @@ class DiscStakka(object):
         self.open()
 
     def close(self):
-        dev, self._dev = self._dev, None
+        self._open = False
         self.serial = None
         self.firmware = None
-        if dev is not None:
-            try:
-                dev.close()
-            except Exception:
-                pass
+        self._io.close()
 
     @property
     def connected(self):
-        return self._dev is not None
+        return self._open
 
-    @staticmethod
-    def present():
+    def present(self):
         """True if a unit is on the bus, without opening it."""
-        try:
-            return bool(hid.enumerate(VID, PID))
-        except Exception:
-            return False
+        return self._io.present()
 
     # -- wire ------------------------------------------------------------
 
     def _read(self, timeout_ms=POLL_MS):
-        if self._dev is None:
+        if not self._open:
             raise NotConnected("device is not open")
         try:
-            raw = self._dev.read(64, timeout_ms)
+            raw = self._io.read(64, timeout_ms)
         except (IOError, OSError) as exc:
             self.close()
             raise NotConnected("read failed: %s" % exc)
@@ -211,14 +189,14 @@ class DiscStakka(object):
         return Packet(raw)
 
     def _write(self, msgid, cmd, x1=0, x2=0, x3=0, x4=0, x5=0):
-        if self._dev is None:
+        if not self._open:
             raise NotConnected("device is not open")
         # Leading 0x00 is hidapi's report-ID slot; the unit uses unnumbered
         # reports so hidapi strips it. The 0x01 after it is a constant payload
         # byte (core.h calls it ReportID, but core.cpp:148 sends report ID 0).
         buf = bytes([0x00, 0x01, self.unit, msgid, cmd, x1, x2, x3, x4, x5])
         try:
-            if self._dev.write(buf) < 0:
+            if self._io.write(buf) < 0:
                 raise DeviceError("write failed")
         except (IOError, OSError) as exc:
             self.close()

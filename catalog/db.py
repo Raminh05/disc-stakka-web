@@ -9,7 +9,7 @@ import sqlite3
 from datetime import datetime
 
 from catalog import taxonomy
-from discstakka.protocol import SLOT_MAX, SLOT_MIN
+from discstakka.slots import SLOT_MAX, SLOT_MIN
 
 DEFAULT_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "catalog.db")
