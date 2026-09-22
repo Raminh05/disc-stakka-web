@@ -10,9 +10,29 @@ project. See [Prior work](#prior-work).
 
 ## Running it
 
+Needs **Python 3.14** — not an operating system's bundled Python. Create the
+virtual environment and install the dependencies once:
+
 ```sh
-./.venv/bin/python app.py          # http://0.0.0.0:5050
+python3.14 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
+
+Then either join the environment and run the app:
+
+```sh
+. .venv/bin/activate        # fish: source .venv/bin/activate.fish
+python app.py               # http://0.0.0.0:5050
+```
+
+or, if you would rather not, call that interpreter directly — it does the same
+thing:
+
+```sh
+.venv/bin/python app.py
+```
+
+Every `python` in this README means whichever of those two you picked.
 
 Then browse to `http://<this-machine>:5050/` from anywhere on the LAN.
 Set `DISCSTAKKA_PORT` to move it. Port 5000 is deliberately avoided:

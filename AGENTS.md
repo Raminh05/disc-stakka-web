@@ -39,9 +39,17 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 
 ## Running and checking
 
-Use a virtual environment at `.venv` built from **Python 3.14**, with
-`requirements.txt` installed. Don't use an operating system's bundled Python.
-Run these from the project root with that venv's Python:
+Use a virtual environment at `.venv` built from **Python 3.14**. Don't use an
+operating system's bundled Python.
+
+```sh
+python3.14 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+Run everything below from the project root with that environment's interpreter,
+either by joining it (`. .venv/bin/activate`) or by calling `.venv/bin/python`
+directly. `python` below means whichever you chose.
 
 ```sh
 python -m unittest discover -s tests   # no hardware, no network, ~3 s
