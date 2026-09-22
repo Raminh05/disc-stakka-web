@@ -26,8 +26,8 @@ import threading
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module
-from catalog import db
-from config import Config
+from discstakka.catalog import db
+from discstakka.config import Config
 from discstakka import device, protocol
 from tests.clock import RealClock
 from tests.fake_device import SimulatedTransport

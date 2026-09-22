@@ -89,14 +89,13 @@ jobs:
       - name: Build image
         run: docker build -t discstakka-web:ci .
 
-      # The image copies root files by name, so a new module left out of that
-      # COPY builds fine and fails on first boot. Importing the app inside the
-      # image catches it. Only possible because create_app() removed app.py's
+      # Importing the app inside the image proves every module and schema.sql
+      # actually shipped. Only possible because create_app() removed app.py's
       # import-time side effects: the import opens no device and writes nothing.
       - name: Smoke-test the image
         run: >
           docker run --rm --entrypoint python discstakka-web:ci
-          -c "import app, config, catalog.db, discstakka.flows"
+          -c "import app, discstakka.config, discstakka.catalog.db, discstakka.flows"
 
       # No further run step: docker-entrypoint.sh's preflight needs the device
       # nodes and the cgroup rule that docker-compose.yml provisions, and no CI

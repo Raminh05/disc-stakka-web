@@ -7,8 +7,11 @@ going near the real catalogue.
 
 import os
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_DATA = os.path.join(HERE, "data")
+# The project root, which is this package's parent: the app runs either from a
+# checkout or from /app in the container, and in both the state sits beside the
+# package rather than inside it.
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DEFAULT_DATA = os.path.join(ROOT, "data")
 
 
 class Config(object):
@@ -27,3 +30,12 @@ class Config(object):
     @property
     def secret_key_path(self):
         return os.path.join(self.data_dir, "secret_key")
+
+    @property
+    def art_dir(self):
+        """Cover art, which lives under static/ rather than in the data dir.
+
+        Flask serves it from there and docker-compose.yml mounts it there, so it
+        cannot follow DISCSTAKKA_DATA without the browser losing every image.
+        """
+        return os.path.join(ROOT, "static", "art")

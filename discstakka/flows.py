@@ -11,9 +11,8 @@ set run against a simulated carousel.
 
 import time
 
-from catalog import db
-
 from . import jobs
+from .catalog import db
 
 
 def run_reset(ds, conn, job, trace):

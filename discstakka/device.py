@@ -15,9 +15,8 @@ What a job actually does lives in :mod:`discstakka.flows`.
 import threading
 import traceback
 
-from catalog import db
-
 from . import jobs
+from .catalog import db
 from .protocol import DiscStakka, DeviceError, NotConnected, describe_status
 from .trace import NullTrace, Trace
 

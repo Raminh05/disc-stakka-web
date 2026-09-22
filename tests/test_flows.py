@@ -13,7 +13,7 @@ import shutil
 import tempfile
 import unittest
 
-from catalog import db
+from discstakka.catalog import db
 from discstakka import device, flows, jobs, protocol
 from discstakka import trace as trace_module
 from discstakka.trace import Trace

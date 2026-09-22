@@ -20,6 +20,8 @@ from urllib.parse import urlparse
 import requests
 from PIL import Image
 
+from ..config import Config
+
 THUMB_PX = 160
 FULL_PX = 500
 JPEG_QUALITY = 85
@@ -28,8 +30,10 @@ MAX_BYTES = 8 * 1024 * 1024
 FETCH_TIMEOUT = 10
 MAX_REDIRECTS = 3
 
-ART_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "art")
+#: Where cover art is written. Config owns it because it has to match the
+#: folder Flask serves and the compose bind mount, neither of which follows
+#: DISCSTAKKA_DATA. Same fallback-at-import shape as db.DEFAULT_PATH.
+ART_DIR = Config().art_dir
 
 
 class ArtError(Exception):

@@ -11,8 +11,8 @@ import tempfile
 import unittest
 
 import app as app_module
-from catalog import db
-from config import Config
+from discstakka.catalog import db
+from discstakka.config import Config
 from discstakka import device, protocol
 from tests import fake_device as fake
 from tests.clock import RealClock

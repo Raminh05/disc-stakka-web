@@ -15,7 +15,7 @@ USB_MAJOR=189
 
 say() { echo "preflight: $*"; }
 
-# Fatal: app.py writes data/secret_key at import, so the alternative is a
+# Fatal: create_app() writes data/secret_key at startup, so the alternative is a
 # PermissionError traceback on every restart.
 if [ ! -w /app/data ]; then
     say "/app/data is not writable by uid $(id -u). On the host, run:"

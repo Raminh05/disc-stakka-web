@@ -57,8 +57,10 @@ RUN groupadd -g $APP_GID stakka \
     && useradd -u $APP_UID -g $APP_GID -M -d /app stakka
 
 WORKDIR /app
-COPY app.py config.py schema.sql ./
-COPY catalog/ catalog/
+# app.py is the only root file the image needs. Everything else - config.py,
+# catalog/ and schema.sql - travels inside the package, so a new module cannot
+# be left out of a COPY line and fail on first boot.
+COPY app.py ./
 COPY discstakka/ discstakka/
 COPY templates/ templates/
 COPY static/ static/

@@ -15,8 +15,8 @@ import os
 from flask import (Flask, abort, flash, redirect, render_template, request,
                    session, url_for)
 
-from catalog import art, db, taxonomy
-from config import Config
+from discstakka.catalog import art, db, taxonomy
+from discstakka.config import Config
 from discstakka import device, flows, jobs
 from discstakka.protocol import DeviceError
 from discstakka.slots import SLOT_MAX, SLOT_MIN

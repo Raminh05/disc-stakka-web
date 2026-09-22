@@ -7,10 +7,11 @@ here needs to be clever - readability wins.
 import os
 import sqlite3
 from datetime import datetime
+from importlib import resources
 
-from catalog import taxonomy
-from config import Config
-from discstakka.slots import SLOT_MAX, SLOT_MIN
+from ..config import Config
+from ..slots import SLOT_MAX, SLOT_MIN
+from . import taxonomy
 
 #: Only a fallback: the application passes an explicit path from its Config.
 DEFAULT_PATH = Config().db_path
@@ -37,9 +38,7 @@ def init(path=None):
     """Create the schema if it is not there yet. Safe to call repeatedly."""
     target = path or DEFAULT_PATH
     os.makedirs(os.path.dirname(target), exist_ok=True)
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    with open(os.path.join(here, "schema.sql")) as fh:
-        ddl = fh.read()
+    ddl = resources.files(__package__).joinpath("schema.sql").read_text()
     conn = connect(target)
     # Migrate first: schema.sql indexes columns that an older database has yet
     # to gain, and CREATE INDEX on a missing column fails the whole script.
