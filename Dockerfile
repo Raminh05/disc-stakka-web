@@ -57,7 +57,7 @@ RUN groupadd -g $APP_GID stakka \
     && useradd -u $APP_UID -g $APP_GID -M -d /app stakka
 
 WORKDIR /app
-COPY app.py schema.sql ./
+COPY app.py config.py schema.sql ./
 COPY catalog/ catalog/
 COPY discstakka/ discstakka/
 COPY templates/ templates/

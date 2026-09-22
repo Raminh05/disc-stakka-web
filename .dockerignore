@@ -14,3 +14,8 @@ deploy
 flake.nix
 run.sh
 *.md
+
+# The simulated carousel and its runner are development tools, and fakerun.py
+# imports from tests/, which is not in the image.
+tests
+tools/fakerun.py
