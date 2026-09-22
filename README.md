@@ -180,13 +180,42 @@ move after one will home the carousel first. That is automatic.
 
 | Path | What |
 |---|---|
+| `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/protocol.py` | HID protocol, ported from `discstakka.c` |
-| `discstakka/device.py` | Single worker thread owning the device; the flows |
+| `discstakka/device.py` | Single worker thread owning the device |
+| `discstakka/flows.py` | The eject, add and reset flows |
 | `discstakka/jobs.py` | Job phases and registry |
+| `discstakka/trace.py` | Per-job record of what the unit reported |
+| `config.py` | Data directory, database, traces, secret key, port |
 | `catalog/db.py` | SQLite catalogue |
 | `catalog/taxonomy.py` | The categories, and the console list for games |
 | `catalog/art.py` | Cover art ingest (upload + URL), with SSRF guards |
 | `templates/job.html` | The meta-refresh polling page |
+
+## Testing without a carousel
+
+`tests/fake_device.py` is a simulated Disc Stakka sitting behind the transport
+interface, so the real protocol, flows and routes run against it unchanged.
+Its timings and state machine come from the 25 captured runs in `data/traces`,
+and one test checks that a simulated load still produces the same status
+signature as a recorded one.
+
+```sh
+python -m unittest discover -s tests   # ~3 s, no hardware, no network
+python tools/fakerun.py                # the app, browsable, with a fake unit
+```
+
+`fakerun.py` gives you the physical half on stdin: `i` to insert a disc, `t` to
+take one, `u` and `r` to unplug and replug, `b` to switch on the idle blip that
+makes commands go missing. It serves from a scratch directory, so the real
+catalogue is never involved.
+
+Two things the simulator is honest about. Every captured trace is a load or a
+return, so `DISC_IN_BAY` and `ACK_TIMEOUT` are modelled from what the client
+expects rather than from evidence - eject is now traced, so a single real
+ejection would fix that. And `0x4000` appears in five traces, decoded by
+neither this code nor the 2005 daemon; it is reproduced as a latched bit so the
+suite can prove no mask is confused by it.
 
 ## Protocol notes worth keeping
 

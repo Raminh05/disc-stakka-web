@@ -11,9 +11,14 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 
 | Path | What |
 |---|---|
-| `app.py` | Flask routes |
+| `app.py` | Flask routes, and `create_app()` |
+| `config.py` | Where state lives: data dir, db, traces, secret key, port |
+| `discstakka/transport.py` | The only module that imports `hid` |
 | `discstakka/protocol.py` | HID wire protocol (a port of `discstakka.c`) |
-| `discstakka/device.py` | The single worker thread that owns the device, and the eject/add/reset flows |
+| `discstakka/slots.py` | `SLOT_MIN`, `SLOT_MAX`, `HOME` |
+| `discstakka/device.py` | The single worker thread that owns the device |
+| `discstakka/flows.py` | The eject, add and reset flows |
+| `discstakka/trace.py` | Per-job record of the status stream, and a null one |
 | `discstakka/jobs.py` | Job phases and the in-memory registry |
 | `catalog/db.py` | SQLite access and startup migrations |
 | `catalog/taxonomy.py` | The fixed category and console lists |
@@ -23,6 +28,10 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `static/modern.css` | Enhancements, all inside `@supports` |
 | `static/enhance.js` | Optional XHR polling. Nothing depends on it |
 | `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
+| `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
+| `tests/fake_device.py` | The simulated carousel, calibrated from `data/traces` |
+| `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
+| `.github/workflows/ci.yml` | Suite, suite-without-hidapi, and the image build |
 | `Dockerfile` | Container image, Linux hosts only |
 | `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
 | `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
@@ -35,16 +44,26 @@ Use a virtual environment at `.venv` built from **Python 3.14**, with
 Run these from the project root with that venv's Python:
 
 ```sh
+python -m unittest discover -s tests   # no hardware, no network, ~3 s
+python tools/fakerun.py                # the app against a simulated carousel
 python app.py              # serves on 0.0.0.0:5050; DISCSTAKKA_PORT changes the port
 python tools/ps3lint.py    # needs the server running
 ```
 
-`run.sh` is a shortcut for the first command on macOS and Linux.
+`run.sh` is a shortcut for `python app.py` on macOS and Linux.
 
 - Talking to the unit needs USB HID access for the account running the app.
   On Linux that usually means a udev rule for `0718:d000`.
-- There is no test suite. After a UI change, run `ps3lint.py` against the
-  running server and open the affected pages.
+- Run the suite after any change. It needs no hardware and does not touch
+  `data/`; `DISCSTAKKA_DATA` points the whole app at a scratch directory.
+- After a UI change also run `ps3lint.py`, either against `fakerun.py` or
+  against a real server. `tests/test_ps3lint.py` does this for you.
+- The simulated carousel is calibrated against the captured runs in
+  `data/traces`. If you change its timings or state machine, keep
+  `test_the_simulated_run_matches_a_captured_one` passing - it is the only
+  thing tying the mock to the real hardware.
+- Nothing above `discstakka/transport.py` may import `hid`. The `no-hidapi` CI
+  job exists to catch that.
 - **Do not trigger hardware actions without asking.** That covers eject,
   return, add, reset, and `python -m discstakka.protocol`, because they move a
   real carousel. Browsing pages, `/device`, and the lint are safe.
