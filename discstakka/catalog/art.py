@@ -30,9 +30,8 @@ MAX_BYTES = 8 * 1024 * 1024
 FETCH_TIMEOUT = 10
 MAX_REDIRECTS = 3
 
-#: Where cover art is written. Config owns it because it has to match the
-#: folder Flask serves and the compose bind mount, neither of which follows
-#: DISCSTAKKA_DATA. Same fallback-at-import shape as db.DEFAULT_PATH.
+#: Only a fallback, the same shape as db.DEFAULT_PATH: the application passes
+#: an explicit directory from its Config.
 ART_DIR = Config().art_dir
 
 
@@ -140,7 +139,7 @@ def _flatten(img):
     return img.convert("RGB")
 
 
-def store(data, stem=None):
+def store(data, stem=None, directory=None):
     """Write thumb + full JPEGs and return the stem to record in the DB.
 
     The stem carries a random suffix so the filename changes whenever art is
@@ -153,8 +152,9 @@ def store(data, stem=None):
     except Exception as exc:
         raise ArtError("That file is not an image this server can read.") from exc
 
+    directory = directory or ART_DIR
     img = _flatten(img)
-    os.makedirs(ART_DIR, exist_ok=True)
+    os.makedirs(directory, exist_ok=True)
     stem = stem or uuid.uuid4().hex[:12]
 
     for suffix, px in (("thumb", THUMB_PX), ("full", FULL_PX)):
@@ -162,7 +162,7 @@ def store(data, stem=None):
         copy.thumbnail((px, px), Image.LANCZOS)
         # No exif= argument, so metadata is dropped on the way out.
         copy.save(
-            os.path.join(ART_DIR, "%s_%s.jpg" % (stem, suffix)),
+            os.path.join(directory, "%s_%s.jpg" % (stem, suffix)),
             "JPEG",
             quality=JPEG_QUALITY,
             optimize=True,
@@ -171,18 +171,18 @@ def store(data, stem=None):
     return stem
 
 
-def remove(stem):
+def remove(stem, directory=None):
     if not stem:
         return
     for suffix in ("thumb", "full"):
-        path = os.path.join(ART_DIR, "%s_%s.jpg" % (stem, suffix))
+        path = os.path.join(directory or ART_DIR, "%s_%s.jpg" % (stem, suffix))
         try:
             os.remove(path)
         except OSError:
             pass
 
 
-def ingest(upload=None, url=None, replacing=None):
+def ingest(upload=None, url=None, replacing=None, directory=None):
     """Take whichever source was supplied and return a new stem, or None.
 
     ``upload`` is a Werkzeug FileStorage; ``url`` a string. If both are empty
@@ -201,7 +201,7 @@ def ingest(upload=None, url=None, replacing=None):
     if not data:
         return None
 
-    stem = store(data)
+    stem = store(data, directory=directory)
     if replacing:
-        remove(replacing)
+        remove(replacing, directory=directory)
     return stem

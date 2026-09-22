@@ -17,6 +17,22 @@
       # the pinned versions the suite and the image agree on. Ruff is pinned in
       # pyproject's dev group and arrives with `uv sync`, so it is not here
       # either.
+      # Prototype: the application as a nix derivation, so it can be built and
+      # `nix copy`d to the carousel host and run natively - no Docker, and so
+      # none of the device pass-through the container needs.
+      packages = forAllSystems (pkgs: {
+        default = pkgs.callPackage ./nix/discstakka-web.nix { };
+      });
+
+      apps = forAllSystems (pkgs: {
+        default = {
+          type = "app";
+          program = "${pkgs.callPackage ./nix/discstakka-web.nix { }}/bin/discstakka-web";
+        };
+      });
+
+      nixosModules.default = ./nix/module.nix;
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [ pkgs.python314 pkgs.uv ];

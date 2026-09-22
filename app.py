@@ -19,6 +19,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -209,6 +210,7 @@ def disc_edit(disc_id):
                     request.files.get("art_file"),
                     request.form.get("art_url"),
                     replacing=disc["art_path"],
+                    directory=config.art_dir,
                 )
                 if stem:
                     fields["art_path"] = stem
@@ -242,7 +244,7 @@ def disc_delete(disc_id):
             )
             return render_template("confirm_delete.html", disc=disc, back=back)
         db.delete_disc(c, disc_id)
-        art.remove(disc["art_path"])
+        art.remove(disc["art_path"], directory=config.art_dir)
         if disc["status"] == db.OUT:
             detail = (
                 "It was checked out, so slot %d is no longer held for "
@@ -424,6 +426,16 @@ def reconcile_manual():
 
 
 # -- optional JSON, only for enhance.js on modern browsers ---------------
+
+
+@app.route("/art/<path:filename>")
+def cover_art(filename):
+    """Serve cover art from wherever Config put it.
+
+    Not `static/`: an install whose code is read-only keeps its art elsewhere,
+    and send_from_directory refuses anything that escapes the directory.
+    """
+    return send_from_directory(config.art_dir, filename)
 
 
 @app.route("/job/<job_id>.json")

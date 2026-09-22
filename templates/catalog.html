@@ -99,7 +99,7 @@
   <td class="cell" width="33%" valign="top">
     <a href="{{ url_for('disc_page', disc_id=disc.id) }}">
       {% if disc.art_path %}
-        <img src="{{ url_for('static', filename='art/' + disc.art_path + '_thumb.jpg') }}"
+        <img src="{{ url_for('cover_art', filename=disc.art_path + '_thumb.jpg') }}"
              width="160" height="160" alt="">
       {% else %}
         <span class="noart">no art</span>
