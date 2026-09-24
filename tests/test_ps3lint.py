@@ -43,17 +43,21 @@ class Ps3Lint(unittest.TestCase):
         server = subprocess.Popen(
             [sys.executable, os.path.join("tools", "fakerun.py"), "--port", str(port)],
             cwd=ROOT,
+            # SIGTERM does not flush stdio, so a buffered pipe would lose the
+            # output of a server that hangs rather than exits.
+            env=dict(os.environ, PYTHONUNBUFFERED="1"),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
         )
         try:
-            self.assertTrue(
-                wait_for(base + "/", server),
-                "the simulated server did not start:\n%s"
-                % (server.stdout.read() if server.poll() else ""),
-            )
+            if not wait_for(base + "/", server):
+                server.terminate()
+                output = server.communicate(timeout=10)[0]
+                self.fail(
+                    "the simulated server never answered on %s:\n%s" % (base, output)
+                )
             lint = subprocess.run(
                 [sys.executable, os.path.join("tools", "ps3lint.py"), base],
                 cwd=ROOT,
