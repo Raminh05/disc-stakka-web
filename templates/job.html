@@ -6,10 +6,11 @@
   The whole PS3 story lives in this tag. NetFront has no usable AJAX, so the
   page reloads itself until the job reaches a terminal phase, at which point the
   tag is simply not emitted and the reloading stops. Prompting phases poll
-  faster so the "insert"/"take" transition is caught promptly.
+  faster so the "insert"/"take" transition is caught promptly. Where
+  enhance.js has shown XHR works, the interval is a slow safety net instead.
 #}
 {% if not job.done %}
-<meta http-equiv="refresh" content="{% if job.prompting %}1{% else %}2{% endif %};url={{ url_for('job_page', job_id=job.id) }}">
+<meta http-equiv="refresh" content="{{ refresh_s }};url={{ url_for('job_page', job_id=job.id) }}">
 {% endif %}
 {% endblock %}
 

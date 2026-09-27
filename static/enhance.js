@@ -23,10 +23,11 @@
     if (!match) { return; }
     var url = match[1];
 
-    /* Take over from meta refresh: poll JSON and only reload when the phase
-       actually changes. Avoids the full-page flash every second. */
-    meta.parentNode.removeChild(meta);
-
+    /* Poll JSON and only reload when the phase actually changes. Removing the
+       meta tag here would not help: the parser has already scheduled its
+       refresh. Instead the cookie tells the server this browser can poll, and
+       from the next load it sends a slow refresh as a safety net only. */
+    var proven = false;
     var phase = null;
     function poll() {
         var xhr = new XMLHttpRequest();
@@ -38,6 +39,10 @@
             try { data = JSON.parse(xhr.responseText); }
             catch (e) { window.location.href = url; return; }
 
+            if (!proven) {
+                proven = true;
+                try { document.cookie = "xhr=1; path=/; max-age=31536000"; } catch (e) {}
+            }
             if (phase === null) { phase = data.phase; }
             if (data.phase !== phase || data.done) { window.location.href = url; return; }
 
