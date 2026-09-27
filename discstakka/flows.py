@@ -13,11 +13,14 @@ import time
 
 from . import jobs
 from .catalog import db
+from .protocol import DeviceError
 
 
 def run_reset(ds, conn, job, trace):
     job.set_phase(jobs.MOVING, "Resetting the unit...")
     ds.reset(progress=job.note)
+    db.log_event(conn, "reset")
+    conn.commit()
     job.succeed("Unit reset. Carousel is at home.")
 
 
@@ -51,13 +54,25 @@ def run_eject(ds, conn, job, trace, disc_id):
     if not ds.wait_for_take():
         job.set_phase(jobs.RETRACTING, "Not taken - putting it back...")
         trace.mark("not taken; retracting")
-        ds.retract(progress=job.note)
+        try:
+            ds.retract(progress=job.note)
+        except DeviceError as exc:
+            # Do not park: rotating with a disc in the bay is how it gets hurt.
+            trace.mark("retract failed: %s" % exc)
+            db.log_event(conn, "failed", disc_id, slot, "retract: %s" % exc)
+            conn.commit()
+            job.fail(
+                "The disc was not taken in time, and the unit could not put "
+                "it back: %s. Take it from the bay, then Reset the unit. "
+                "The catalogue has not changed." % exc
+            )
+            return
         ds.park()
         db.log_event(conn, "retracted", disc_id, slot)
         conn.commit()
         job.fail(
-            "The disc was not taken in time, so the unit was told to "
-            "take it back into slot %d. The catalogue has not changed." % slot
+            "The disc was not taken in time, so the unit put it back into "
+            "slot %d. The catalogue has not changed." % slot
         )
         return
 
@@ -91,6 +106,8 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
     if not ds.wait_for_insert():
         job.set_phase(jobs.PARKING, "Timed out; returning to home...")
         ds.park()
+        db.log_event(conn, "failed", disc_id, slot, "no disc inserted")
+        conn.commit()
         job.fail("No disc went in within 30 seconds. Nothing has changed.")
         return
 
@@ -101,25 +118,35 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
 
     job.set_phase(jobs.PARKING, "Returning to home...")
     ds.park()
-    trace.mark("parked; watching for 10s to see if it comes back out")
 
-    # The unit has been spitting discs back out after a nominally successful
-    # load. Keep watching so the trace captures it.
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        trace.status(ds.status())
-
+    # The disc is in. Catalogue it before anything else can go wrong, or a
+    # unit that drops off the bus during the watch below leaves a disc in a
+    # slot the catalogue calls free.
     if returning:
         db.mark_stored(conn, disc_id)
+    else:
+        disc_id = db.create_disc(conn, slot, title="Untitled disc (slot %d)" % slot)
+
+    # The unit has been spitting discs back out after a nominally successful
+    # load. Keep watching so the trace captures it; it is only evidence, so
+    # losing the unit here is not a failure of the load.
+    trace.mark("parked; watching for 10s to see if it comes back out")
+    deadline = time.monotonic() + 10
+    try:
+        while time.monotonic() < deadline:
+            trace.status(ds.status())
+    except DeviceError as exc:
+        trace.mark("lost the unit while watching: %s" % exc)
+
+    if returning:
         disc = db.get_disc(conn, disc_id)
         job.succeed(
             "%s is back in slot %d." % (disc["title"] if disc else "Disc", slot),
             disc_id=disc_id,
         )
     else:
-        new_id = db.create_disc(conn, slot, title="Untitled disc (slot %d)" % slot)
         job.succeed(
             "Disc loaded into slot %d. Now give it a name." % slot,
-            disc_id=new_id,
+            disc_id=disc_id,
             needs_details=True,
         )

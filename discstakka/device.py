@@ -57,38 +57,58 @@ class DeviceController(object):
     def info(self):
         """Header/status summary. Never raises - the UI must render regardless."""
         job = self.current
-        out = {
+        # Read once: the worker's close() can null these between two reads.
+        serial, firmware = self._ds.serial, self._ds.firmware
+        return {
             "present": self._ds.present(),
             "connected": self._ds.connected,
-            "serial": None,
-            "firmware": None,
+            "serial": "%08x" % serial if serial is not None else None,
+            "firmware": firmware,
             "busy_job": job.id if job else None,
             "error": None,
         }
-        if self._ds.connected:
-            out["serial"] = "%08x" % self._ds.serial if self._ds.serial else None
-            out["firmware"] = self._ds.firmware
-        return out
+
+    def _take_device(self):
+        """Claim the unit for a one-off, or raise Busy at once.
+
+        Never waits on _device while holding _lock: every page render takes
+        _lock through ``current``, so a request that queued behind a running
+        job here used to stall the whole site until the job finished.
+        """
+        job = self.current
+        if job is not None:
+            raise Busy(job)
+        # Whoever holds it now is the keeper, briefly, or a job that started
+        # since the check above and will hold it for as long as it runs.
+        if not self._device.acquire(timeout=5):
+            job = self.current
+            if job is not None:
+                raise Busy(job)
+            raise DeviceError("the unit is in use; try again in a moment")
 
     def reconnect(self):
-        with self._lock:
-            if self._current is not None and not self._current.done:
-                raise Busy(self._current)
-            with self._device:
-                self._ds.reconnect()
+        self._take_device()
+        try:
+            self._ds.reconnect()
+        finally:
+            self._device.release()
 
     def probe(self):
         """One-shot status read for the diagnostics page."""
-        with self._lock, self._device:
-            if self._current is not None and not self._current.done:
-                raise Busy(self._current)
+        self._take_device()
+        try:
             self._ds.open()
+            # Status first: 0x14, which reports the position, also clears a
+            # latched error, and the page exists to show that error.
+            status = self._ds.status()
             return {
                 "serial": "%08x" % self._ds.serial,
                 "firmware": self._ds.firmware,
                 "position": self._ds.position(),
-                "status": describe_status(self._ds.status()),
+                "status": describe_status(status),
             }
+        finally:
+            self._device.release()
 
     # -- keeping the unit alive ------------------------------------------
 

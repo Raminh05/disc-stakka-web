@@ -138,7 +138,10 @@ console you can't see.
   with SIGTRAP. Reads and writes stay on the caller.
 - Keep `controller.keep_open()`. The unit resets every ~2.5 s unless it is
   polled and acknowledged, and Linux only polls a HID device that something has
-  open. Take the controller's `_device` lock after `_lock`, never before.
+  open. Take the controller's `_device` lock after `_lock`, never before, and
+  never wait for `_device` while holding `_lock`: every page render takes
+  `_lock` through `controller.current`, so a probe queued behind a job there
+  once stalled the whole site until the job finished.
 
 **Database**
 - A slot is occupied when a row references it. A disc that is checked out

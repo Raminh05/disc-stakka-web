@@ -444,10 +444,18 @@ class DiscStakka(object):
             raise DeviceError("timed out taking the disc in")
 
     def retract(self, progress=None):
+        """Take a presented disc back into its slot."""
         _report(progress, "Retracting disc...")
         self.wait_idle(NOW_MS)  # best effort; retract anyway if still busy
-        self.command(CMD_RETRACT)
-        self.wait_idle()
+        self.require(CMD_RETRACT)
+        if not self.wait_idle():
+            raise DeviceError("timed out taking the disc back")
+        # Confirm rather than assume: a retract the unit never heard leaves it
+        # idle too, with the disc still sitting in the bay.
+        if self.disc_in_bay():
+            raise DeviceError(
+                "the unit did not take the disc back; it is still in the bay"
+            )
 
     def set_led(self, on_time=1, period=1):
         self.command(CMD_SET_LED, on_time, period)

@@ -17,20 +17,28 @@ class Trace(object):
         self.t0 = time.monotonic()
         self.last = None
         os.makedirs(directory, exist_ok=True)
-        self.fh = open(self.path, "w")
-        self.fh.write("# %s  slot=%s\n" % (job.title, job.slot))
+        self.fh = open(self.path, "w", encoding="utf-8")
+        self._write("# %s  slot=%s\n" % (job.title, job.slot))
+
+    def _write(self, line):
+        # Evidence is never a reason to fail a job. A full disk, or a title
+        # the file cannot take, must not stop the runner reaching a terminal
+        # phase - and the controller marks the end after the job's own guard.
+        try:
+            self.fh.write(line)
+            self.fh.flush()
+        except (OSError, ValueError):
+            pass
 
     def status(self, st):
         if st != self.last:
-            self.fh.write(
+            self._write(
                 "%7.2fs  %s\n" % (time.monotonic() - self.t0, describe_status(st))
             )
-            self.fh.flush()
             self.last = st
 
     def mark(self, label):
-        self.fh.write("%7.2fs  -- %s\n" % (time.monotonic() - self.t0, label))
-        self.fh.flush()
+        self._write("%7.2fs  -- %s\n" % (time.monotonic() - self.t0, label))
 
     def close(self):
         try:
