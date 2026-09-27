@@ -29,7 +29,7 @@ from werkzeug.serving import ThreadedWSGIServer
 from discstakka import device, flows, jobs
 from discstakka.catalog import art, db, taxonomy
 from discstakka.config import Config
-from discstakka.protocol import DeviceError
+from discstakka.protocol import TAKE_WINDOW_MS, DeviceError
 from discstakka.slots import SLOT_MAX, SLOT_MIN
 
 app = Flask(__name__)
@@ -92,6 +92,22 @@ def inject_globals():
         "PLATFORMS": taxonomy.PLATFORMS,
         "GAMES": taxonomy.GAMES,
     }
+
+
+def job_using(disc_id=None, slot=None):
+    """The running job that references this disc or slot, if any.
+
+    A catalogue write that races such a job lands after the carousel has
+    already acted, and the job's own final write then fails on it.
+    """
+    job = controller.current
+    if job is None:
+        return None
+    if disc_id is not None and job.disc_id == disc_id:
+        return job
+    if slot is not None and job.slot == slot:
+        return job
+    return None
 
 
 def start_job(job, runner, *args):
@@ -235,6 +251,10 @@ def disc_delete(disc_id):
         disc = db.get_disc(c, disc_id)
         if disc is None:
             abort(404)
+        job = job_using(disc_id, disc["slot"])
+        if job is not None:
+            flash("The unit is working on that disc. Wait for it to finish.", "warn")
+            return see_other(url_for("job_page", job_id=job.id))
         # Only the confirmation form's field deletes, so a stray or repeated
         # POST lands on the confirmation page instead.
         if request.method != "POST" or request.form.get("confirm") != "yes":
@@ -339,9 +359,12 @@ def add():
 #: scheduled survives the tag being removed, so the script cannot switch it off.
 XHR_FALLBACK_S = 10
 
+#: An eject presents the disc for only TAKE_WINDOW_MS, so its safety net has to
+#: fire at least that often or a page whose polling has died misses the prompt.
+EJECT_FALLBACK_S = TAKE_WINDOW_MS // 1000
+
 #: How long one JSON poll vouches for the browser. Every poll renews it, so a
-#: browser that stops polling is back on the fast refresh within seconds - the
-#: take window is only 5 s, and the slow refresh alone would miss it.
+#: browser that stops polling is back on the fast refresh within seconds.
 XHR_COOKIE_S = 5
 
 
@@ -352,10 +375,12 @@ def job_page(job_id):
         flash("That job is no longer being tracked.", "warn")
         return see_other(url_for("index"))
     snap = job.snapshot()
-    if request.cookies.get("xhr") == "1":
-        refresh_s = XHR_FALLBACK_S
-    else:
+    if request.cookies.get("polls") != "1":
         refresh_s = 1 if snap["prompting"] else 2
+    elif snap["kind"] == "eject":
+        refresh_s = EJECT_FALLBACK_S
+    else:
+        refresh_s = XHR_FALLBACK_S
     return render_template("job.html", job=snap, refresh_s=refresh_s)
 
 
@@ -427,12 +452,20 @@ def reconcile_manual():
         except ValueError:
             flash("Pick a slot.", "error")
             return see_other(url_for("reconcile"))
+        if not (SLOT_MIN <= slot <= SLOT_MAX):
+            flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+            return see_other(url_for("reconcile"))
         title = (request.form.get("title") or "").strip()
         if not title:
             flash("A title is required.", "error")
             return see_other(url_for("reconcile"))
         if db.get_by_slot(c, slot) is not None:
             flash("Slot %d already has an entry." % slot, "error")
+            return see_other(url_for("reconcile"))
+        if job_using(slot=slot) is not None:
+            flash(
+                "The unit is working on slot %d. Wait for it to finish." % slot, "error"
+            )
             return see_other(url_for("reconcile"))
 
         disc_id = db.create_disc(c, slot, title, kind="manual")
@@ -451,7 +484,8 @@ def job_json(job_id):
     if job is None:
         return {"error": "unknown job"}, 404
     response = make_response(job.snapshot())
-    response.set_cookie("xhr", "1", max_age=XHR_COOKIE_S)
+    response.headers["Cache-Control"] = "no-store"
+    response.set_cookie("polls", "1", max_age=XHR_COOKIE_S)
     return response
 
 

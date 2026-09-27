@@ -145,12 +145,68 @@ class Jobs(WebTest):
             page = self.body("/job/%s" % job.id)
             self.assertEqual(interval.search(page).group(1), "2")
             cookie = self.client.get("/job/%s.json" % job.id).headers["Set-Cookie"]
-            self.assertIn("xhr=1", cookie)
+            self.assertIn("polls=1", cookie)
             self.assertIn("Max-Age=%d" % app_module.XHR_COOKIE_S, cookie)
             page = self.body("/job/%s" % job.id)
             self.assertEqual(
                 interval.search(page).group(1), str(app_module.XHR_FALLBACK_S)
             )
+            self.client.delete_cookie("polls")
+            self.assertEqual(
+                interval.search(self.body("/job/%s" % job.id)).group(1), "2"
+            )
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_an_eject_page_that_polls_still_refreshes_within_the_take_window(self):
+        # The take prompt is up for five seconds. A safety net slower than that
+        # shows a browser whose polling has died only the retraction.
+        interval = re.compile(r'content="(\d+);url=')
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.kind = "eject"
+        try:
+            self.client.set_cookie("polls", "1")
+            page = self.body("/job/%s" % job.id)
+            self.assertEqual(
+                interval.search(page).group(1), str(app_module.EJECT_FALLBACK_S)
+            )
+            self.assertLessEqual(
+                app_module.EJECT_FALLBACK_S * 1000, protocol.TAKE_WINDOW_MS
+            )
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_disc_the_unit_is_working_on_cannot_be_deleted(self):
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.disc_id = self.disc_id
+        try:
+            response = self.client.post(
+                "/disc/%d/delete" % self.disc_id, data={"confirm": "yes"}
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertRegex(response.headers["Location"], r"/job/%s$" % job.id)
+            self.assertIsNotNone(db.get_disc(self.conn, self.disc_id))
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_slot_the_unit_is_working_on_cannot_be_reconciled_by_hand(self):
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.slot = 9
+        try:
+            response = self.client.post(
+                "/reconcile/manual", data={"slot": "9", "title": "Ico"}
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertIsNone(db.get_by_slot(self.conn, 9))
         finally:
             stub.hold.set()
         _wait(job)
@@ -166,6 +222,23 @@ class Jobs(WebTest):
         finally:
             first.hold.set()
         _wait(job)
+
+    def test_a_slot_outside_the_carousel_is_refused_not_a_500(self):
+        for slot in ("0", "101", "-3"):
+            response = self.client.post(
+                "/reconcile/manual", data={"slot": slot, "title": "Ico"}
+            )
+            self.assertEqual(response.status_code, 303, slot)
+            self.assertRegex(response.headers["Location"], r"/reconcile$")
+        self.assertEqual(db.count_discs(self.conn), 1)
+
+    def test_the_json_view_is_never_cached(self):
+        job = self.controller.submit(
+            _Stub(), lambda ds, conn, job, trace: job.succeed("done")
+        )
+        _wait(job)
+        response = self.client.get("/job/%s.json" % job.id)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_the_json_view_matches_the_snapshot(self):
         job = self.controller.submit(
