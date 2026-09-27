@@ -17,6 +17,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -338,6 +339,11 @@ def add():
 #: scheduled survives the tag being removed, so the script cannot switch it off.
 XHR_FALLBACK_S = 10
 
+#: How long one JSON poll vouches for the browser. Every poll renews it, so a
+#: browser that stops polling is back on the fast refresh within seconds - the
+#: take window is only 5 s, and the slow refresh alone would miss it.
+XHR_COOKIE_S = 5
+
 
 @app.route("/job/<job_id>", methods=["GET", "POST"])
 def job_page(job_id):
@@ -444,7 +450,9 @@ def job_json(job_id):
     job = controller.registry.get(job_id)
     if job is None:
         return {"error": "unknown job"}, 404
-    return job.snapshot()
+    response = make_response(job.snapshot())
+    response.set_cookie("xhr", "1", max_age=XHR_COOKIE_S)
+    return response
 
 
 @app.errorhandler(404)

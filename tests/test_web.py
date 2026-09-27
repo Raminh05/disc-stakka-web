@@ -120,17 +120,23 @@ class Jobs(WebTest):
             self.assertTrue(
                 REFRESH.search(page), "a running job must keep the page refreshing"
             )
+            self.assertIn(
+                '<meta name="job-phase" content="moving">',
+                page,
+                "enhance.js seeds its idea of the phase from this tag",
+            )
         finally:
             jobs_stub.hold.set()
         _wait(job)
-        self.assertFalse(
-            REFRESH.search(self.body("/job/%s" % job.id)),
-            "a finished job must stop refreshing",
-        )
+        page = self.body("/job/%s" % job.id)
+        self.assertFalse(REFRESH.search(page), "a finished job must stop refreshing")
+        self.assertNotIn('name="job-phase"', page)
 
-    def test_a_browser_that_can_poll_gets_only_a_slow_refresh(self):
+    def test_a_browser_that_polls_the_json_view_gets_only_a_slow_refresh(self):
         # enhance.js cannot cancel a meta refresh the parser has already
-        # scheduled, so the server has to stop sending the fast one.
+        # scheduled, so the server has to stop sending the fast one. The JSON
+        # view vouches for the browser, briefly, so a browser that stops
+        # polling does not stay on the slow refresh.
         interval = re.compile(r'content="(\d+);url=')
         job = self.controller.submit(
             stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
@@ -138,7 +144,9 @@ class Jobs(WebTest):
         try:
             page = self.body("/job/%s" % job.id)
             self.assertEqual(interval.search(page).group(1), "2")
-            self.client.set_cookie("xhr", "1")
+            cookie = self.client.get("/job/%s.json" % job.id).headers["Set-Cookie"]
+            self.assertIn("xhr=1", cookie)
+            self.assertIn("Max-Age=%d" % app_module.XHR_COOKIE_S, cookie)
             page = self.body("/job/%s" % job.id)
             self.assertEqual(
                 interval.search(page).group(1), str(app_module.XHR_FALLBACK_S)

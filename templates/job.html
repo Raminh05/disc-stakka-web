@@ -7,10 +7,12 @@
   page reloads itself until the job reaches a terminal phase, at which point the
   tag is simply not emitted and the reloading stops. Prompting phases poll
   faster so the "insert"/"take" transition is caught promptly. Where
-  enhance.js has shown XHR works, the interval is a slow safety net instead.
+  enhance.js has shown XHR works, the interval is a slow safety net instead,
+  and the job-phase tag tells the script which phase this page already shows.
 #}
 {% if not job.done %}
 <meta http-equiv="refresh" content="{{ refresh_s }};url={{ url_for('job_page', job_id=job.id) }}">
+<meta name="job-phase" content="{{ job.phase }}">
 {% endif %}
 {% endblock %}
 
