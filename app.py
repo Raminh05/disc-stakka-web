@@ -333,13 +333,24 @@ def add():
         c.close()
 
 
+#: The meta refresh for a browser whose enhance.js has already polled the JSON
+#: view successfully. Only a safety net there: a refresh the parser has already
+#: scheduled survives the tag being removed, so the script cannot switch it off.
+XHR_FALLBACK_S = 10
+
+
 @app.route("/job/<job_id>", methods=["GET", "POST"])
 def job_page(job_id):
     job = controller.registry.get(job_id)
     if job is None:
         flash("That job is no longer being tracked.", "warn")
         return see_other(url_for("index"))
-    return render_template("job.html", job=job.snapshot())
+    snap = job.snapshot()
+    if request.cookies.get("xhr") == "1":
+        refresh_s = XHR_FALLBACK_S
+    else:
+        refresh_s = 1 if snap["prompting"] else 2
+    return render_template("job.html", job=snap, refresh_s=refresh_s)
 
 
 @app.route("/device", methods=["GET", "POST"])
