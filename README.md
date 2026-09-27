@@ -203,6 +203,13 @@ though a fresh process can.
 cache) and retrying, so it normally self-heals. If it does not, **`/device` has
 a Reconnect button** that drops and reopens the handle.
 
+Between jobs the app keeps the unit open, and opens a fresh handle whenever the
+old one stops working. That is not only for sleep: the unit resets itself about
+every 2.5 s unless the host polls it and acknowledges it, and Linux, unlike
+macOS, only polls a HID device that something has open. A unit on a Linux host
+with nothing polling it shows up in `dmesg` as a disconnect and re-enumerate
+every few seconds.
+
 The unit loses its homed state across a power cycle, so the first positional
 move after one will home the carousel first. That is automatic.
 

@@ -453,4 +453,5 @@ if __name__ == "__main__":
     # Not port 5000: on macOS that belongs to Control Center's AirPlay
     # Receiver, which answers every request with a bare 403.
     created = create_app()
+    controller.keep_open()
     created.run(host="0.0.0.0", port=config.port, threaded=True, debug=False)
