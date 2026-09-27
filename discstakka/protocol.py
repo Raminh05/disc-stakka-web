@@ -185,6 +185,18 @@ class DiscStakka(object):
         """True if a unit is on the bus, without opening it."""
         return self._io.present()
 
+    def alive(self):
+        """Whether the open handle still reaches the unit. Reads, never writes.
+
+        A handle left over from before a re-enumeration fails here and is
+        closed, which is how the keeper in device.py knows to open a fresh one.
+        """
+        try:
+            self._read(0)
+        except NotConnected:
+            return False
+        return True
+
     # -- wire ------------------------------------------------------------
 
     def _read(self, timeout_ms=POLL_MS):

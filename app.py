@@ -474,4 +474,5 @@ if __name__ == "__main__":
     # Not port 5000: on macOS that belongs to Control Center's AirPlay
     # Receiver, which answers every request with a bare 403.
     create_app()
+    controller.keep_open()
     serve("0.0.0.0", config.port)

@@ -394,5 +394,69 @@ class ControllerTest(FlowTest):
         self.fail("job did not finish")
 
 
+class KeepOpen(FlowTest):
+    """The keeper that stops a unit on a Linux host resetting every 2.5 s.
+
+    The simulator does not model the reset itself, so these check what the
+    keeper does about it: open and acknowledge, and reopen after a drop.
+    """
+
+    controller = ControllerTest.controller
+    wait_for = ControllerTest.wait_for
+
+    def setUp(self):
+        FlowTest.setUp(self)
+        self.ds.close()
+        self.control = self.controller()
+
+    def test_a_unit_nobody_has_asked_for_is_opened_and_acknowledged(self):
+        self.control.tend()
+        self.assertTrue(self.ds.connected)
+        self.assertEqual(self.ds.serial, self.unit.serial)
+
+    def test_a_working_handle_is_left_alone(self):
+        self.control.tend()
+        opens = self.io.opens
+        self.control.tend()
+        self.assertEqual(self.io.opens, opens)
+
+    def test_a_unit_that_re_enumerated_gets_a_fresh_handle(self):
+        self.control.tend()
+        opens = self.io.opens
+        self.io.unplug()
+        self.io.replug()
+        self.control.tend()
+        self.assertTrue(self.ds.connected)
+        self.assertEqual(self.io.opens, opens + 1)
+
+    def test_an_absent_unit_is_not_an_error(self):
+        self.io.unplug()
+        self.control.tend()
+        self.assertFalse(self.ds.connected)
+
+    def test_a_running_job_is_left_alone(self):
+        import threading
+
+        started, release = threading.Event(), threading.Event()
+
+        def hold(ds, conn, job, trace):
+            started.set()
+            if release.wait(5):
+                job.succeed("done")
+
+        job = jobs.Job("reset", "Reset the unit")
+        self.control.submit(job, hold)
+        try:
+            self.assertTrue(started.wait(5))
+            opens = self.io.opens
+            self.io.unplug()
+            self.io.replug()
+            self.control.tend()
+            self.assertEqual(self.io.opens, opens)
+        finally:
+            release.set()
+        self.wait_for(job)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -110,6 +110,7 @@ def main(argv):
         trace_dir=config.trace_dir,
     )
     app_module.create_app(config, controller)
+    controller.keep_open()
 
     print(__doc__.split("Usage:")[0].strip())
     print("\ndata     %s" % data_dir)

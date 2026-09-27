@@ -13,6 +13,7 @@ What a job actually does lives in :mod:`discstakka.flows`.
 """
 
 import threading
+import time
 import traceback
 
 from . import jobs
@@ -37,6 +38,9 @@ class DeviceController(object):
         self._db_path = db_path
         self._trace_dir = trace_dir
         self._lock = threading.Lock()
+        #: Held by whoever is using the unit: a job, a probe, or the keeper.
+        #: Taken after _lock, never before it.
+        self._device = threading.Lock()
         self._current = None
         self.registry = jobs.JobRegistry()
 
@@ -70,11 +74,12 @@ class DeviceController(object):
         with self._lock:
             if self._current is not None and not self._current.done:
                 raise Busy(self._current)
-            self._ds.reconnect()
+            with self._device:
+                self._ds.reconnect()
 
     def probe(self):
         """One-shot status read for the diagnostics page."""
-        with self._lock:
+        with self._lock, self._device:
             if self._current is not None and not self._current.done:
                 raise Busy(self._current)
             self._ds.open()
@@ -84,6 +89,46 @@ class DeviceController(object):
                 "position": self._ds.position(),
                 "status": describe_status(self._ds.status()),
             }
+
+    # -- keeping the unit alive ------------------------------------------
+
+    def keep_open(self, interval_s=0.5):
+        """Hold the unit open whenever it is on the bus and no job has it.
+
+        The unit resets itself about every 2.5 s unless the host polls it and
+        answers its 0xCC. macOS polls every HID device from attach, so opening
+        on the first job was enough there. Linux's usbhid only polls a device
+        something has open, so a unit attached to a Linux host cycled through
+        disconnect and re-enumerate until the next job, and again whenever its
+        handle went stale. An open handle is polled by hidapi's read thread.
+        """
+        thread = threading.Thread(
+            target=self._keep_open, args=(interval_s,), name="keep-open", daemon=True
+        )
+        thread.start()
+
+    def _keep_open(self, interval_s):
+        while True:
+            self.tend()
+            time.sleep(interval_s)
+
+    def tend(self):
+        """One pass of keep_open. Never waits for a job, and never raises."""
+        if self.current is not None:
+            return
+        if not self._device.acquire(blocking=False):
+            return
+        try:
+            if self._ds.connected and self._ds.alive():
+                return
+            if self._ds.present():
+                self._ds.open()
+        except DeviceError:
+            pass
+        except Exception:  # pragma: no cover - keep the keeper alive
+            traceback.print_exc()
+        finally:
+            self._device.release()
 
     # -- submission ------------------------------------------------------
 
@@ -108,6 +153,10 @@ class DeviceController(object):
             return NullTrace()  # evidence is never a reason to fail the job
 
     def _run(self, job, runner, args):
+        with self._device:
+            self._run_owned(job, runner, args)
+
+    def _run_owned(self, job, runner, args):
         conn = None
         trace = self._trace_for(job)
         try:
