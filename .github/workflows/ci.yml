@@ -105,7 +105,7 @@ jobs:
 
       - name: Assert hidapi really is absent
         run: |
-          if python -c "import hid" 2>/dev/null; then
+          if .venv/bin/python -c "import hid" 2>/dev/null; then
             echo "hidapi is installed; this job would prove nothing." >&2
             exit 1
           fi

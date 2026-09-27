@@ -12,7 +12,8 @@ import sys
 import time
 import unittest
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,7 +38,7 @@ def wait_for(url, process, timeout=30.0):
 
 
 class Ps3Lint(unittest.TestCase):
-    def test_every_page_passes_including_the_device_page(self):
+    def test_every_page_passes_including_the_device_and_job_pages(self):
         port = free_port()
         base = "http://127.0.0.1:%d" % port
         server = subprocess.Popen(
@@ -58,8 +59,14 @@ class Ps3Lint(unittest.TestCase):
                 self.fail(
                     "the simulated server never answered on %s:\n%s" % (base, output)
                 )
+            # The job page only exists while a job does. This ejects the first
+            # seeded disc from the simulated carousel, which moves nothing real,
+            # and follows the 303 to the page that polls it.
+            eject = urlopen(Request(base + "/disc/1/eject", data=b""), timeout=5)
+            job_path = urlparse(eject.geturl()).path
+            self.assertRegex(job_path, r"^/job/[\w-]+$")
             lint = subprocess.run(
-                [sys.executable, os.path.join("tools", "ps3lint.py"), base],
+                [sys.executable, os.path.join("tools", "ps3lint.py"), base, job_path],
                 cwd=ROOT,
                 capture_output=True,
                 text=True,
@@ -67,6 +74,7 @@ class Ps3Lint(unittest.TestCase):
             )
             self.assertEqual(lint.returncode, 0, lint.stdout + lint.stderr)
             self.assertIn("/device", lint.stdout)
+            self.assertIn(job_path, lint.stdout)
         finally:
             server.terminate()
             try:

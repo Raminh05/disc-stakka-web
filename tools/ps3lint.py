@@ -6,17 +6,33 @@ violate by accident months later, and the failure mode is silent: the page
 renders on your laptop and is unusable on the console. This checks the rules
 mechanically.
 
-Usage:  ./.venv/bin/python tools/ps3lint.py [base-url]
+Usage:  ./.venv/bin/python tools/ps3lint.py [base-url] [more paths...]
+
+Extra paths are linted as well. A job page needs a job, so tests/test_ps3lint.py
+starts one on the simulated unit and passes its path here.
 """
 
 import os
 import re
 import sys
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-PAGES = ["/", "/add", "/reconcile", "/device"]
+#: Every template but job.html. The disc pages assume the first disc still
+#: exists, which it does on fakerun's seed; the last path is the error page.
+PAGES = [
+    "/",
+    "/?view=list",
+    "/add",
+    "/reconcile",
+    "/device",
+    "/disc/1",
+    "/disc/1/edit",
+    "/disc/1/delete",
+    "/no-such-page",
+]
 
 # (pattern, why it matters). Checked against served HTML.
 HTML_RULES = [
@@ -52,11 +68,13 @@ CSS_RULES = [
 ]
 
 
-def check_html(base):
+def check_html(base, pages):
     bad = 0
-    for path in PAGES:
+    for path in pages:
         try:
             body = urlopen(base + path, timeout=5).read().decode("utf-8", "replace")
+        except HTTPError as exc:
+            body = exc.read().decode("utf-8", "replace")  # the error page counts
         except Exception as exc:
             print("  ?? %-14s could not fetch: %s" % (path, exc))
             bad += 1
@@ -111,7 +129,7 @@ def main():
     print("stylesheets:")
     bad = check_css()
     print("\npages:")
-    bad += check_html(base)
+    bad += check_html(base, PAGES + sys.argv[2:])
     print("\n%s" % ("FAILED (%d)" % bad if bad else "all clear"))
     return 1 if bad else 0
 

@@ -35,9 +35,9 @@ from discstakka.config import Config
 from discstakka.simulator import SimulatedTransport
 
 SEED = [
-    (1, "Shadow of the Colossus", "Team Ico", "Video games", "PlayStation 2"),
-    (2, "Katamari Damacy", "Namco", "Video games", "PlayStation 2"),
-    (7, "Ico", "Team Ico", "Video games", "PlayStation 2"),
+    (1, "Shadow of the Colossus", "Team Ico", "Video games", "PS2"),
+    (2, "Katamari Damacy", "Namco", "Video games", "PS2"),
+    (7, "Ico", "Team Ico", "Video games", "PS2"),
     (18, "Spirited Away", "Studio Ghibli", "Movies", None),
 ]
 
