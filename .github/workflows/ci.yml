@@ -49,10 +49,14 @@ jobs:
             || { echo "::error::requirements.txt is stale; re-run uv export"; exit 1; }
 
   tests:
-    name: Test suite
+    name: Test suite (${{ matrix.os }})
     needs: lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +67,7 @@ jobs:
       # hidapi and Pillow fall back to an sdist build when no wheel matches the
       # interpreter. These are the Dockerfile build stage's packages.
       - name: Install build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
