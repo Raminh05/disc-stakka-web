@@ -11,15 +11,15 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 
 | Path | What |
 |---|---|
-| `app.py` | Flask routes, and `create_app()` |
+| `app.py` | Flask routes, `create_app()`, and `serve()` |
 | `pyproject.toml` | Dependencies, Ruff config, `package = false` |
 | `uv.lock` | All 16 packages pinned. `requirements.txt` is exported from it |
 | `discstakka/config.py` | Where state lives: data dir, db, traces, art, port |
-| `discstakka/transport.py` | The only module that imports `hid` |
+| `discstakka/transport.py` | The only module that imports `hid`, on its own thread |
 | `discstakka/simulator.py` | The simulated carousel, calibrated from `data/traces` |
 | `discstakka/protocol.py` | HID wire protocol (a port of `discstakka.c`) |
 | `discstakka/slots.py` | `SLOT_MIN`, `SLOT_MAX`, `HOME` |
-| `discstakka/device.py` | The single worker thread that owns the device |
+| `discstakka/device.py` | Owns the device: runs jobs, and keeps the unit open between them |
 | `discstakka/flows.py` | The eject, add and reset flows |
 | `discstakka/trace.py` | Per-job record of the status stream, and a null one |
 | `discstakka/jobs.py` | Job phases and the in-memory registry |
@@ -33,7 +33,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
 | `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
 | `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
-| `.github/workflows/ci.yml` | Ruff, suite, suite-without-hidapi, nix shell, image |
+| `.github/workflows/ci.yml` | Ruff, suite on Linux/macOS/Windows, suite-without-hidapi, nix shell, image |
 | `Dockerfile` | Container image, Linux hosts only; installs from `uv.lock` |
 | `docker-compose.yml` | Devices, volumes, and the hidraw cgroup rule |
 | `docker-entrypoint.sh` | Preflight: permissions and device diagnosis, then exec |
@@ -95,6 +95,9 @@ console you can't see.
   `controller.submit` and redirect to the job page, which polls it.
 - The container runs the same way: its `CMD` is `python app.py`. Never put
   gunicorn or uwsgi in the image.
+- Start the server with `app.serve()`, not `app.run()`. `http.server` reverse
+  resolves its own address before it listens, and where that lookup stalls the
+  port stays closed for 30 s or more. It did on the macOS CI runner.
 
 **PS3 / old-browser compatibility**
 - Pages are server-rendered, forms use POST, and no JavaScript is required
@@ -129,6 +132,13 @@ console you can't see.
   - Never send while BUSY.
 - Keep the retries in `require()`, the settle wait in `ingest()`, and the
   re-enumeration in `open()`.
+- `import hid`, enumerate, open and close all go through the hidapi thread in
+  `transport.py`. On macOS hidapi ties its device manager to the thread that
+  first imports it, and a request thread that has exited crashes the server
+  with SIGTRAP. Reads and writes stay on the caller.
+- Keep `controller.keep_open()`. The unit resets every ~2.5 s unless it is
+  polled and acknowledged, and Linux only polls a HID device that something has
+  open. Take the controller's `_device` lock after `_lock`, never before.
 
 **Database**
 - A slot is occupied when a row references it. A disc that is checked out
