@@ -140,6 +140,19 @@ def _int_arg(name, default):
         return default
 
 
+def _form_slot():
+    """The slot the form names, or None with the reason already flashed."""
+    try:
+        slot = int(request.form.get("slot", ""))
+    except ValueError:
+        flash("Pick a slot.", "error")
+        return None
+    if not (SLOT_MIN <= slot <= SLOT_MAX):
+        flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+        return None
+    return slot
+
+
 # -- catalogue -----------------------------------------------------------
 
 VIEWS = ("covers", "list")
@@ -333,13 +346,8 @@ def add():
     c = conn()
     try:
         if request.method == "POST":
-            try:
-                slot = int(request.form.get("slot", ""))
-            except ValueError:
-                flash("Pick a slot.", "error")
-                return see_other(url_for("add"))
-            if not (SLOT_MIN <= slot <= SLOT_MAX):
-                flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+            slot = _form_slot()
+            if slot is None:
                 return see_other(url_for("add"))
             if db.get_by_slot(c, slot) is not None:
                 flash("Slot %d is already spoken for." % slot, "error")
@@ -450,13 +458,8 @@ def reconcile_manual():
     """
     c = conn()
     try:
-        try:
-            slot = int(request.form.get("slot", ""))
-        except ValueError:
-            flash("Pick a slot.", "error")
-            return see_other(url_for("reconcile"))
-        if not (SLOT_MIN <= slot <= SLOT_MAX):
-            flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+        slot = _form_slot()
+        if slot is None:
             return see_other(url_for("reconcile"))
         title = (request.form.get("title") or "").strip()
         if not title:

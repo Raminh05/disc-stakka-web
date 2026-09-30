@@ -288,13 +288,18 @@ class Jobs(WebTest):
         _wait(job)
 
     def test_a_slot_outside_the_carousel_is_refused_not_a_500(self):
-        for slot in ("0", "101", "-3"):
+        for slot in ("0", "101", "-3", "", "seven"):
             response = self.client.post(
                 "/reconcile/manual", data={"slot": slot, "title": "Ico"}
             )
             self.assertEqual(response.status_code, 303, slot)
             self.assertRegex(response.headers["Location"], r"/reconcile$")
+
+            response = self.client.post("/add", data={"slot": slot})
+            self.assertEqual(response.status_code, 303, slot)
+            self.assertRegex(response.headers["Location"], r"/add$")
         self.assertEqual(db.count_discs(self.conn), 1)
+        self.assertIsNone(self.controller.current, "a refused slot started a job")
 
     def test_the_json_view_is_never_cached(self):
         job = self.controller.submit(

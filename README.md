@@ -348,6 +348,11 @@ belief, not a fact. **Reconcile** shows that belief, lets you correct it, and
 records discs loaded by hand without moving anything. Every hardware action is
 written to the `event` table.
 
+The unit also cannot say where a disc went once the bay is empty. A disc left
+in the bay is taken back, but one grabbed as it goes in looks the same, so the
+disc page has **Mark as taken out** and **Mark as back in its slot** to put the
+catalogue right by hand. Neither moves the carousel.
+
 A disc that is checked out **keeps its slot reserved** so it has somewhere to go
 back to. "Put this disc back" re-runs the load flow against that slot.
 

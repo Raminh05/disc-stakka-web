@@ -25,9 +25,11 @@ Timings come from data/traces/*.log, 25 real runs of this application:
 23 of those 25 traces share one status signature - HOMED, DISC_WAITING+HOMED,
 NEW_DISC_ACK+HOMED, HOMED - which is what test_flows calibrates against.
 
-Two bits are modelled from the client's expectations rather than from a capture,
-because every trace on hand is a load or a return and none is an eject:
-DISC_IN_BAY (0x0400) and ACK_TIMEOUT (0x0200).
+Two bits are modelled from the client's expectations rather than from a capture:
+DISC_IN_BAY (0x0400) and ACK_TIMEOUT (0x0200). The ejects captured since have
+not been fitted here. In each the bay clears with BUSY and ACK_TIMEOUT set,
+which take_disc() does not show, and none contains a retract, so what the unit
+answers to 0x05 is still a guess.
 """
 
 import heapq
