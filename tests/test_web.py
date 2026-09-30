@@ -92,10 +92,66 @@ class Methods(WebTest):
         for path in (
             "/disc/%d/eject" % disc_id,
             "/disc/%d/return" % disc_id,
+            "/disc/%d/mark-out" % disc_id,
+            "/disc/%d/mark-stored" % disc_id,
             "/device/reset",
             "/device/reconnect",
         ):
             self.assertEqual(self.client.get(path).status_code, 405, path)
+
+
+class Corrections(WebTest):
+    """Putting the catalogue right by hand after the unit lost track."""
+
+    def status(self, disc_id):
+        return db.get_disc(self.conn, disc_id)["status"]
+
+    def test_a_disc_taken_late_can_be_marked_out_and_then_returned(self):
+        disc_id = self.disc()
+        response = self.client.post("/disc/%d/mark-out" % disc_id)
+        self.assertEqual(response.status_code, 303)
+        self.assertRegex(response.headers["Location"], r"/disc/%d$" % disc_id)
+        self.assertEqual(self.status(disc_id), db.OUT)
+        self.assertEqual(db.get_disc(self.conn, disc_id)["slot"], 3)
+        self.assertIn("Put this disc back", self.body("/disc/%d" % disc_id))
+
+        self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(self.status(disc_id), db.STORED)
+        self.assertEqual(
+            [(e["kind"], e["detail"]) for e in db.recent_events(self.conn, 2)],
+            [("manual", "marked as in its slot"), ("manual", "marked as taken out")],
+        )
+
+    def test_nothing_is_sent_to_the_unit(self):
+        disc_id = self.disc()
+        self.client.post("/disc/%d/mark-out" % disc_id)
+        self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(self.io.writes, [])
+        self.assertIsNone(self.controller.current)
+
+    def test_marking_what_is_already_so_changes_nothing(self):
+        disc_id = self.disc()
+        events = len(db.recent_events(self.conn, 50))
+        response = self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(len(db.recent_events(self.conn, 50)), events)
+
+    def test_a_disc_the_unit_is_working_on_is_left_alone(self):
+        disc_id = self.disc()
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.disc_id = disc_id
+        try:
+            response = self.client.post("/disc/%d/mark-out" % disc_id)
+            self.assertRegex(response.headers["Location"], r"/job/%s$" % job.id)
+            self.assertEqual(self.status(disc_id), db.STORED)
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_missing_disc_is_a_404(self):
+        self.assertEqual(self.client.post("/disc/99/mark-out").status_code, 404)
 
 
 class Jobs(WebTest):

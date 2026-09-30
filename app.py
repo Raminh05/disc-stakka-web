@@ -475,6 +475,51 @@ def reconcile_manual():
         c.close()
 
 
+@app.route("/disc/<int:disc_id>/mark-out", methods=["POST"])
+def disc_mark_out(disc_id):
+    return _correct(disc_id, db.OUT)
+
+
+@app.route("/disc/<int:disc_id>/mark-stored", methods=["POST"])
+def disc_mark_stored(disc_id):
+    return _correct(disc_id, db.STORED)
+
+
+def _correct(disc_id, status):
+    """Say where a disc really is, without moving the carousel.
+
+    The unit reports an empty bay, never where the disc went, so a disc taken
+    late or put back by hand leaves the catalogue wrong with no job to fix it.
+    """
+    c = conn()
+    try:
+        disc = db.get_disc(c, disc_id)
+        if disc is None:
+            abort(404)
+        job = job_using(disc_id, disc["slot"])
+        if job is not None:
+            flash("The unit is working on that disc. Wait for it to finish.", "warn")
+            return see_other(url_for("job_page", job_id=job.id))
+        if disc["status"] == status:
+            flash("The catalogue already says that.", "warn")
+        elif status == db.OUT:
+            db.mark_out(c, disc_id, kind="manual", detail="marked as taken out")
+            flash(
+                "“%s” is now listed as checked out. Slot %d is held for its "
+                "return." % (disc["title"], disc["slot"]),
+                "ok",
+            )
+        else:
+            db.mark_stored(c, disc_id, kind="manual", detail="marked as in its slot")
+            flash(
+                "“%s” is now listed as in slot %d." % (disc["title"], disc["slot"]),
+                "ok",
+            )
+        return see_other(url_for("disc_page", disc_id=disc_id))
+    finally:
+        c.close()
+
+
 # -- optional JSON, only for enhance.js on modern browsers ---------------
 
 
