@@ -68,6 +68,14 @@ class Pages(WebTest):
         self.assertIn("%08x" % self.unit.serial, page)
         self.assertIn("02.17.0079", page)
 
+    def test_the_activity_list_says_why_as_well_as_which_disc(self):
+        disc_id = self.disc()
+        db.log_event(self.conn, "failed", disc_id, 3, "eject found no disc")
+        self.conn.commit()
+        page = self.body("/device")
+        self.assertIn("Katamari Damacy: eject found no disc", page)
+        self.assertNotIn("Katamari Damacy: Katamari Damacy", page)
+
     def test_the_device_page_still_renders_with_no_unit(self):
         self.io.unplug()
         self.assertEqual(self.client.get("/device").status_code, 200)

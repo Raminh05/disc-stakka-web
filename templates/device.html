@@ -53,7 +53,7 @@ home. Safe to run whenever the unit seems confused.</p>
 {% for e in events %}
 <tr><td>{{ e.at.replace('T', ' ') }}</td><td>{{ e.kind }}</td>
     <td>{{ e.slot if e.slot is not none else '' }}</td>
-    <td>{{ e.title or '' }}{% if e.title and e.detail %}: {% endif %}{{ e.detail or '' }}</td></tr>
+    <td>{{ e.title or e.detail or '' }}{% if e.title and e.detail and e.detail != e.title %}: {{ e.detail }}{% endif %}</td></tr>
 {% endfor %}
 </table>
 {% endif %}
