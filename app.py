@@ -29,7 +29,7 @@ from werkzeug.serving import ThreadedWSGIServer
 from discstakka import device, flows, jobs
 from discstakka.catalog import art, db, taxonomy
 from discstakka.config import Config
-from discstakka.protocol import TAKE_WINDOW_MS, DeviceError
+from discstakka.protocol import DeviceError
 from discstakka.slots import SLOT_MAX, SLOT_MIN
 
 app = Flask(__name__)
@@ -359,9 +359,12 @@ def add():
 #: scheduled survives the tag being removed, so the script cannot switch it off.
 XHR_FALLBACK_S = 10
 
-#: An eject presents the disc for only TAKE_WINDOW_MS, so its safety net has to
-#: fire at least that often or a page whose polling has died misses the prompt.
-EJECT_FALLBACK_S = TAKE_WINDOW_MS // 1000
+#: An eject presents the disc for only TAKE_WINDOW_MS, so until the disc is
+#: taken its safety net has to land inside that window with time to spare, or a
+#: page whose polling has died shows the prompt as it expires. A refresh counts
+#: from the end of the page load, so one as long as the window always misses.
+EJECT_FALLBACK_S = 2
+EJECT_WATCHED = (jobs.MOVING, jobs.PRESENTED)
 
 #: How long one JSON poll vouches for the browser. Every poll renews it, so a
 #: browser that stops polling is back on the fast refresh within seconds.
@@ -377,7 +380,7 @@ def job_page(job_id):
     snap = job.snapshot()
     if request.cookies.get("polls") != "1":
         refresh_s = 1 if snap["prompting"] else 2
-    elif snap["kind"] == "eject":
+    elif snap["kind"] == "eject" and snap["phase"] in EJECT_WATCHED:
         refresh_s = EJECT_FALLBACK_S
     else:
         refresh_s = XHR_FALLBACK_S

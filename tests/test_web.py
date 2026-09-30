@@ -230,7 +230,15 @@ class Jobs(WebTest):
                 interval.search(page).group(1), str(app_module.EJECT_FALLBACK_S)
             )
             self.assertLessEqual(
-                app_module.EJECT_FALLBACK_S * 1000, protocol.TAKE_WINDOW_MS
+                app_module.EJECT_FALLBACK_S * 2000,
+                protocol.TAKE_WINDOW_MS,
+                "a refresh counts from the end of the load, so it needs room",
+            )
+            job.set_phase("retracting", "Not taken - putting it back...")
+            self.assertEqual(
+                interval.search(self.body("/job/%s" % job.id)).group(1),
+                str(app_module.XHR_FALLBACK_S),
+                "nothing is left to catch once the window has closed",
             )
         finally:
             stub.hold.set()

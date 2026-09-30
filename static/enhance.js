@@ -33,7 +33,9 @@
        once so the cookie is in place before a 1 s refresh fires. A poll that
        fails is simply tried again a second later: the meta refresh is the
        safety net, and reloading on error would loop as fast as the server
-       could answer. */
+       could answer. A 404 is not that kind of failure: the server no longer
+       knows the job, and the page it sends instead is not a job page, so
+       going there cannot loop. */
     function later() { window.setTimeout(poll, 1000); }
 
     function setText(id, text) {
@@ -47,6 +49,7 @@
         xhr.timeout = 5000;  /* a stalled poll reports status 0 below */
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) { return; }
+            if (xhr.status === 404) { window.location.href = url; return; }
             if (xhr.status !== 200) { later(); return; }
             var data;
             try { data = JSON.parse(xhr.responseText); }
