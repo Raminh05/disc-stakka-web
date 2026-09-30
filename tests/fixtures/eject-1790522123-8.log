@@ -1,0 +1,14 @@
+# Eject Wii Sports (slot 2)  slot=2
+   0.02s  -- eject slot 2
+   0.11s  0001 [HOMED]
+   1.01s  8081 [BUSY HOMED]
+   3.40s  8481 [BUSY DISC_IN_BAY HOMED]
+   4.62s  0401 [DISC_IN_BAY HOMED]
+   4.91s  -- presented; waiting for it to be taken
+  10.03s  -- not taken; retracting
+  10.94s  8481 [BUSY DISC_IN_BAY HOMED]
+  11.84s  8081 [BUSY HOMED]
+  13.64s  0101 [HOMED]
+  14.54s  8081 [BUSY HOMED]
+  16.35s  0001 [HOMED]
+  16.37s  -- end

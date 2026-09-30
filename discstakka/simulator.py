@@ -15,21 +15,24 @@ engineering (disc-stakka-ctl-0.03) rather than imported from protocol.py. A mock
 that shares its constants with the code under test cannot disagree with it, and
 disagreeing is the whole job.
 
-Timings come from data/traces/*.log, 25 real runs of this application:
+Timings come from captured runs of this application (data/traces/*.log, with
+one of each kind kept under tests/fixtures):
 
   seek        ~1.5 s plus ~0.056 s per slot   (home->1 1.5 s, home->60 4.8 s)
   idle blip   ~0.30 s every ~3 s, even at rest
   ingest      disc at aperture, 1.5 s busy drawing it off, then NEW_DISC_ACK
               for 1.8 s more before the unit goes idle and will hear 0x1D
+  take        the bay clears with ACK_TIMEOUT and BUSY for ~0.9 s; the flag
+              stays until the next move
+  retract     ~3.6 s busy, the bay clearing half way through; afterwards the
+              undecoded 0x0100 is set until the next move
 
-23 of those 25 traces share one status signature - HOMED, DISC_WAITING+HOMED,
-NEW_DISC_ACK+HOMED, HOMED - which is what test_flows calibrates against.
+Nearly every load and return shares one status signature - HOMED,
+DISC_WAITING+HOMED, NEW_DISC_ACK+HOMED, HOMED - and so do the ejects, taken or
+retracted. test_flows calibrates against one capture of each.
 
-Two bits are modelled from the client's expectations rather than from a capture:
-DISC_IN_BAY (0x0400) and ACK_TIMEOUT (0x0200). The ejects captured since have
-not been fitted here. In each the bay clears with BUSY and ACK_TIMEOUT set,
-which take_disc() does not show, and none contains a retract, so what the unit
-answers to 0x05 is still a guess.
+What the unit answers to 0x05, if anything, is still not known: the traces
+record status polls, not acks. The zero-byte reply here is a guess.
 """
 
 import heapq
@@ -77,6 +80,9 @@ ACK_TIMEOUT = 0x0200
 #: way through one captured load and stayed set for every run of that session.
 #: Modelled so the suite can prove an unknown high bit confuses no mask.
 UNKNOWN = 0x4000
+#: Also undecoded. Every captured retract ends with it set, and the next move
+#: clears it.
+RETRACTED = 0x0100
 HOMED = 0x0001
 
 REPEAT_MS = 143  # the unit repeats its last reply about seven times a second
@@ -92,7 +98,10 @@ BLIP_CHANCE = 0.1
 APERTURE_MS = 1_500  # disc seen -> drawn off the aperture, NEW_DISC_ACK set
 SETTLE_MS = 1_800  # NEW_DISC_ACK set -> unit idle and able to hear 0x1D
 INGEST_MS = 1_800  # 0x1D acknowledged -> disc in the slot
-BAY_MS = 1_200  # retract or present
+BAY_MS = 1_200  # present
+TAKE_MS = 900  # the bay clears; BUSY and ACK_TIMEOUT while the unit notices
+RETRACT_MS = 3_600  # 0x05 heard -> idle; the bay clears at RETRACT_BAY_MS
+RETRACT_BAY_MS = 1_800
 #: How long the firmware waits to be told what to do with a disc it has drawn
 #: in. Past this it gives up and puts the disc back out - the failure the 0.03
 #: README describes as "accepts the CD, then ejects it soon after".
@@ -139,6 +148,7 @@ class Carousel(object):
         self.new_disc_ack = False
         self.disc_in_bay = False
         self.ack_timeout = False
+        self.retracted = False
         self.unknown_bit = False
 
         self.blips = False
@@ -195,6 +205,8 @@ class Carousel(object):
             st |= DISC_IN_BAY
         if self.ack_timeout:
             st |= ACK_TIMEOUT
+        if self.retracted:
+            st |= RETRACTED
         if self.unknown_bit:
             st |= UNKNOWN
         if self.homed:
@@ -217,6 +229,8 @@ class Carousel(object):
 
         def taken():
             self.disc_in_bay = False
+            self.ack_timeout = True
+            self._work_for(TAKE_MS)
 
         self.at(when, taken)
 
@@ -291,6 +305,8 @@ class Carousel(object):
         target, eject = args[0], args[1]
         travel = self.seek_ms(target)
         self._work_for(travel)
+        self.ack_timeout = False
+        self.retracted = False
 
         def arrived():
             self.position = target
@@ -303,14 +319,15 @@ class Carousel(object):
         return self._status_reply()
 
     def _cmd_05(self, args):
-        self._work_for(BAY_MS)
+        self._work_for(RETRACT_MS)
 
         def retracted():
             if self.disc_in_bay:
                 self.disc_in_bay = False
                 self.occupied.add(self.position)
+                self.retracted = True
 
-        self.after(BAY_MS, retracted)
+        self.after(RETRACT_BAY_MS, retracted)
         return (0, 0, 0, 0)
 
     def _cmd_06(self, args):

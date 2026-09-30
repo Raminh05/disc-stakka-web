@@ -60,7 +60,7 @@ def run_eject(ds, conn, job, trace, disc_id):
         job.set_phase(jobs.RETRACTING, "Not taken - putting it back...")
         trace.mark("not taken; retracting")
         try:
-            ds.retract(progress=job.note)
+            acked = ds.retract(progress=job.note)
         except DeviceError as exc:
             # Do not park: rotating with a disc in the bay is how it gets hurt.
             trace.mark("retract failed: %s" % exc)
@@ -73,6 +73,7 @@ def run_eject(ds, conn, job, trace, disc_id):
                 disc_id=disc_id,
             )
             return
+        trace.mark("retract %s" % ("acknowledged" if acked else "not acknowledged"))
         ds.park()
         db.log_event(conn, "retracted", disc_id, slot)
         conn.commit()

@@ -452,8 +452,10 @@ class DiscStakka(object):
             raise DeviceError("timed out taking the disc in")
 
     def retract(self, progress=None):
+        """Returns whether the unit acknowledged ``0x05``, for the trace."""
         _report(progress, "Retracting disc...")
         self.wait_idle(NOW_MS)  # best effort; retract anyway if still busy
+        acked = True
         try:
             self.require(CMD_RETRACT)
         except NotConnected:
@@ -461,13 +463,14 @@ class DiscStakka(object):
         except DeviceError:
             # No capture shows what the unit answers to 0x05, if anything, so a
             # missing ack proves nothing either way. The bay sensor decides.
-            pass
+            acked = False
         if not self.wait_idle():
             raise DeviceError("timed out taking the disc back")
         if self.disc_in_bay():
             raise DeviceError(
                 "the unit did not take the disc back; it is still in the bay"
             )
+        return acked
 
     def set_led(self, on_time=1, period=1):
         self.command(CMD_SET_LED, on_time, period)

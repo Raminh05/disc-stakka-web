@@ -273,8 +273,8 @@ class Add(FlowTest):
             self.assertIn(marker, body)
 
     def test_the_simulated_run_matches_a_captured_one(self):
-        # 23 of the 25 traces in data/traces share this signature. If the
-        # simulator drifts from the hardware, this is what notices.
+        # Nearly every load and return in data/traces shares this signature.
+        # If the simulator drifts from the hardware, this is what notices.
         job = self.job(
             "add", "Load a disc into slot 4", slot=4, when={jobs.AWAITING_INSERT: 4_000}
         )
@@ -308,6 +308,32 @@ class Eject(FlowTest):
         self.assertEqual(row["status"], db.OUT)
         self.assertEqual(row["slot"], 18, "a checked-out disc keeps its slot")
         self.assertNotIn(18, self.unit.occupied)
+
+    def test_the_simulated_take_matches_a_captured_one(self):
+        # The unit flags ACK_TIMEOUT as the disc leaves the bay, and the flag
+        # stays until the park. A flow that read it as an error would fail
+        # every eject that went right.
+        job = self.job(
+            "eject",
+            "Eject slot 18",
+            disc_id=self.disc_id,
+            slot=18,
+            when={jobs.PRESENTED: 1_200},
+        )
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
+
+        captured = signature(os.path.join(FIXTURES, "eject-1790806244-12.log"))
+        self.assertEqual(signature(self.only_trace()), captured)
+        self.assertTrue(job.snapshot()["ok"])
+
+    def test_the_simulated_retract_matches_a_captured_one(self):
+        job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
+
+        captured = signature(os.path.join(FIXTURES, "eject-1790522123-8.log"))
+        self.assertEqual(signature(self.only_trace()), captured)
+        with open(self.only_trace()) as fh:
+            self.assertIn("retract acknowledged", fh.read())
 
     def test_an_empty_slot_is_reported_as_drift(self):
         self.unit.occupied.discard(18)
