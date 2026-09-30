@@ -316,7 +316,8 @@ class Eject(FlowTest):
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
-        self.assertIn("Reconcile", snap["error"])
+        self.assertIn("mark it as taken out", snap["error"])
+        self.assertEqual(snap["result"]["disc_id"], self.disc_id)
         self.assertIn(("failed", "eject found no disc"), self.events())
         self.assertEqual(db.get_disc(self.conn, self.disc_id)["status"], db.STORED)
 
@@ -332,6 +333,27 @@ class Eject(FlowTest):
         self.assertIn("retracted", [k for k, _ in self.events()])
         self.assertEqual(db.get_disc(self.conn, self.disc_id)["status"], db.STORED)
         self.assertIn(18, self.unit.occupied, "the disc was not put back")
+        self.assertEqual(self.unit.position, protocol.HOME)
+
+    def test_a_disc_taken_as_it_goes_back_is_not_called_stored_for_certain(self):
+        # The bay reads empty either way, so the job may only say what it knows
+        # and has to lead to the page where the catalogue can be corrected.
+        job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
+        original = job.set_phase
+
+        def take_it_late(phase, message, window_s=None):
+            original(phase, message, window_s)
+            if phase == jobs.RETRACTING:
+                self.unit.take_disc(at_ms=self.clock.ms + 400)
+
+        job.set_phase = take_it_late
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
+
+        snap = job.snapshot()
+        self.assertNotIn(18, self.unit.occupied, "the hand has it, not the slot")
+        self.assertIn("If you took it", snap["error"])
+        self.assertNotIn("put it back", snap["error"])
+        self.assertEqual(snap["result"]["disc_id"], self.disc_id)
 
     def test_a_retract_lost_to_a_blip_is_sent_again(self):
         real_handle = self.unit.handle
@@ -353,34 +375,66 @@ class Eject(FlowTest):
         self.assertFalse(self.unit.disc_in_bay)
         self.assertIn(18, self.unit.occupied)
 
-    def test_a_retract_the_unit_never_heard_is_reported_not_assumed(self):
-        # Every attempt lost: the disc is still in the bay, and the job has to
-        # say so rather than log a retraction that never happened.
+    def answer_retract(self, acks, retracts):
+        real_handle = self.unit.handle
+
+        def handle(msgid, cmd, args):
+            if cmd != fake.CMD_RETRACT:
+                return real_handle(msgid, cmd, args)
+            if retracts:
+                real_handle(msgid, cmd, args)
+            return (0, 0, 0, 0) if acks else None
+
+        self.unit.handle = handle
+
+    def test_an_acknowledged_retract_that_moved_nothing_is_a_failure(self):
+        # The ack says the unit heard, not that the disc went anywhere.
+        self.answer_retract(acks=True, retracts=False)
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
-        original = job.set_phase
-
-        def drop_everything_from_now_on(phase, message, window_s=None):
-            original(phase, message, window_s)
-            if phase == jobs.RETRACTING:
-                self.unit.blips = True
-                self.unit.blip_chance = 1.0
-
-        job.set_phase = drop_everything_from_now_on
         flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
         snap = job.snapshot()
         self.assertFalse(snap["ok"])
-        self.assertIn("could not put it back", snap["error"])
+        self.assertIn("still in the bay", snap["error"])
+        self.assertIn("mark the disc as taken out", snap["error"])
+        self.assertEqual(snap["result"]["disc_id"], self.disc_id)
         self.assertTrue(self.unit.disc_in_bay, "the disc is still out")
         self.assertNotIn("retracted", [k for k, _ in self.events()])
         self.assertTrue(
             any(k == "failed" and "retract" in d for k, d in self.events()),
             self.events(),
         )
-        self.assertEqual(
-            self.unit.position, 18, "the carousel must not turn with a disc out"
-        )
         self.assertEqual(db.get_disc(self.conn, self.disc_id)["status"], db.STORED)
+
+    def test_a_retract_the_unit_performs_without_acknowledging_counts(self):
+        # Nobody has captured what the unit answers to 0x05. If it is nothing,
+        # the disc going back must not be reported as the unit failing.
+        self.answer_retract(acks=False, retracts=True)
+        job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
+        flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
+
+        self.assertIn("retracted", [k for k, _ in self.events()])
+        self.assertNotIn("failed", [k for k, _ in self.events()])
+        self.assertIn(18, self.unit.occupied)
+        self.assertEqual(self.unit.position, protocol.HOME)
+
+    def test_nothing_turns_the_carousel_with_a_disc_in_the_bay(self):
+        self.ds.move_to(18, eject=True)
+        self.assertTrue(self.unit.disc_in_bay)
+        moves = [c for c, _ in self.io.writes].count(fake.CMD_SET_POS)
+
+        with self.assertRaises(protocol.DeviceError):
+            self.ds.move_to(3)
+        with self.assertRaises(protocol.DeviceError):
+            self.ds.reset()
+        self.ds.park()
+
+        self.assertEqual(self.unit.position, 18)
+        self.assertEqual(
+            [c for c, _ in self.io.writes].count(fake.CMD_SET_POS),
+            moves,
+            "a move was sent with a disc out",
+        )
 
     def test_a_missing_disc_is_not_a_hardware_error(self):
         job = self.job("eject", "Eject slot 18", disc_id=self.disc_id, slot=18)
@@ -486,13 +540,48 @@ class ControllerTest(FlowTest):
             self.block.set()
         self.wait_for(job)
 
-    def test_a_probe_shows_a_latched_error_rather_than_clearing_it(self):
-        # 0x14 reports the position but also clears the error, so it has to
-        # come after the status read or the diagnostics page never sees one.
+    def test_a_probe_shows_a_latched_error_and_leaves_it_latched(self):
+        # 0x14 reports the position but also clears the error, so looking at
+        # the diagnostics page used to wipe what it was showing.
         self.unit.ack_timeout = True
-        probe = self.controller().probe()
-        self.assertIn("ACK_TIMEOUT", probe["status"])
-        self.assertEqual(probe["position"], protocol.HOME)
+        control = self.controller()
+        for _ in range(2):
+            probe = control.probe()
+            self.assertIn("ACK_TIMEOUT", probe["status"])
+            self.assertIsNone(probe["position"])
+        self.assertTrue(self.unit.ack_timeout)
+
+    def test_a_probe_of_a_healthy_unit_reports_its_position(self):
+        self.assertEqual(self.controller().probe()["position"], protocol.HOME)
+
+    def test_a_failure_that_escapes_a_flow_is_still_logged(self):
+        control = self.controller()
+        job = jobs.Job("add", "Load a disc into slot 3", slot=3)
+
+        def time_out(ds, conn, job, trace):
+            raise protocol.DeviceError("timed out moving to slot 3")
+
+        control.submit(job, time_out)
+        self.wait_for(job)
+        self.assertIn(("failed", "timed out moving to slot 3"), self.events())
+
+    def test_a_unit_that_will_not_answer_is_reported_as_that_not_as_in_use(self):
+        # The keeper holds the unit for as long as open() takes to give up,
+        # which is longer than a request is willing to wait for it.
+        self.ds.close()
+        self.io.read = lambda size, timeout_ms: self.clock.advance_ms(timeout_ms)
+        control = self.controller()
+        control.CLAIM_TIMEOUT_S = 0.05
+        control.tend()
+
+        control._device.acquire()
+        try:
+            for attempt in (control.reconnect, control.probe):
+                with self.assertRaises(protocol.DeviceError) as caught:
+                    attempt()
+                self.assertIn("no packets from the unit", str(caught.exception))
+        finally:
+            control._device.release()
 
     def setUp(self):
         FlowTest.setUp(self)

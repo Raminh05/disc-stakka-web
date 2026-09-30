@@ -13,7 +13,7 @@ import time
 
 from . import jobs
 from .catalog import db
-from .protocol import DeviceError
+from .protocol import INSERT_WINDOW_MS, TAKE_WINDOW_MS, DeviceError
 
 
 def run_reset(ds, conn, job, trace):
@@ -43,12 +43,17 @@ def run_eject(ds, conn, job, trace, disc_id):
         db.log_event(conn, "failed", disc_id, slot, "eject found no disc")
         conn.commit()
         job.fail(
-            "Slot %d appears to be empty. The catalogue may be out of "
-            "step with the carousel - try Reconcile." % slot
+            "Slot %d appears to be empty. If the disc is already out, open it "
+            "and mark it as taken out." % slot,
+            disc_id=disc_id,
         )
         return
 
-    job.set_phase(jobs.PRESENTED, "Take the disc from the unit.", window_s=5)
+    job.set_phase(
+        jobs.PRESENTED,
+        "Take the disc from the unit.",
+        window_s=TAKE_WINDOW_MS // 1000,
+    )
     trace.mark("presented; waiting for it to be taken")
 
     if not ds.wait_for_take():
@@ -63,16 +68,21 @@ def run_eject(ds, conn, job, trace, disc_id):
             conn.commit()
             job.fail(
                 "The disc was not taken in time, and the unit could not put "
-                "it back: %s. Take it from the bay, then Reset the unit. "
-                "The catalogue has not changed." % exc
+                "it back: %s. Take it from the bay, mark the disc as taken "
+                "out, then Reset the unit." % exc,
+                disc_id=disc_id,
             )
             return
         ds.park()
         db.log_event(conn, "retracted", disc_id, slot)
         conn.commit()
+        # An empty bay is all the unit reports, and a hand that took the disc
+        # as it went in empties the bay just the same.
         job.fail(
-            "The disc was not taken in time, so the unit put it back into "
-            "slot %d. The catalogue has not changed." % slot
+            "The disc was not taken in time, so the unit took it back towards "
+            "slot %d. If you took it as it went in, open the disc and mark it "
+            "as taken out." % slot,
+            disc_id=disc_id,
         )
         return
 
@@ -101,7 +111,11 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
     trace.mark("move to slot %d" % slot)
     ds.move_to(slot, progress=job.note)
 
-    job.set_phase(jobs.AWAITING_INSERT, "Insert the disc now.", window_s=30)
+    job.set_phase(
+        jobs.AWAITING_INSERT,
+        "Insert the disc now.",
+        window_s=INSERT_WINDOW_MS // 1000,
+    )
     trace.mark("awaiting insert (watching DISC_WAITING)")
     if not ds.wait_for_insert():
         job.set_phase(jobs.PARKING, "Timed out; returning to home...")

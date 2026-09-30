@@ -382,6 +382,7 @@ class DiscStakka(object):
         self.command(CMD_CLEAR_ERR_2)
         if not self.wait_idle():
             raise DeviceError("unit stayed busy; it may need a power cycle")
+        self._refuse_with_a_disc_out()
 
         self.command(CMD_SET_LED, 1, 1)
         _report(progress, "Homing carousel...")
@@ -395,11 +396,18 @@ class DiscStakka(object):
             raise ValueError("slot %r out of range 0-%d" % (slot, SLOT_MAX))
         if not self.wait_idle():
             raise DeviceError("unit is busy")
+        self._refuse_with_a_disc_out()
         if slot != HOME:
             self.ensure_homed(progress)
         self.require(CMD_SET_POS, slot, 1 if eject else 0)
         if not self.wait_idle():
             raise DeviceError("timed out moving to slot %d" % slot)
+
+    def _refuse_with_a_disc_out(self):
+        # Rotating with a disc in the bay is how it gets hurt. Every move comes
+        # through here, so no caller has to remember.
+        if self.disc_in_bay():
+            raise DeviceError("There is a disc in the bay. Take it out first.")
 
     def park(self, progress=None):
         _report(progress, "Returning to home...")
@@ -444,14 +452,18 @@ class DiscStakka(object):
             raise DeviceError("timed out taking the disc in")
 
     def retract(self, progress=None):
-        """Take a presented disc back into its slot."""
         _report(progress, "Retracting disc...")
         self.wait_idle(NOW_MS)  # best effort; retract anyway if still busy
-        self.require(CMD_RETRACT)
+        try:
+            self.require(CMD_RETRACT)
+        except NotConnected:
+            raise
+        except DeviceError:
+            # No capture shows what the unit answers to 0x05, if anything, so a
+            # missing ack proves nothing either way. The bay sensor decides.
+            pass
         if not self.wait_idle():
             raise DeviceError("timed out taking the disc back")
-        # Confirm rather than assume: a retract the unit never heard leaves it
-        # idle too, with the disc still sitting in the bay.
         if self.disc_in_bay():
             raise DeviceError(
                 "the unit did not take the disc back; it is still in the bay"
