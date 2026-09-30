@@ -6,16 +6,19 @@ violate by accident months later, and the failure mode is silent: the page
 renders on your laptop and is unusable on the console. This checks the rules
 mechanically.
 
-Usage:  ./.venv/bin/python tools/ps3lint.py [base-url] [more paths...]
+Usage:  ./.venv/bin/python tools/ps3lint.py [base-url] [--only] [more paths...]
 
-Extra paths are linted as well. A job page needs a job, so tests/test_ps3lint.py
-starts one on the simulated unit and passes its path here.
+Extra paths are linted as well, and with --only nothing else is. A job page
+needs a job, and a running job changes what /device and the disc pages serve,
+so tests/test_ps3lint.py lints the standing pages first and then starts a job
+and lints what it changes.
 """
 
 import os
 import re
 import sys
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from urllib.request import urlopen
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -33,6 +36,10 @@ PAGES = [
     "/disc/1/delete",
     "/no-such-page",
 ]
+
+#: The only paths allowed to answer with an error. Anywhere else the error page
+#: would be linted in place of the template the path was listed for.
+ERRORS = {"/no-such-page": 404}
 
 # (pattern, why it matters). Checked against served HTML.
 HTML_RULES = [
@@ -72,15 +79,21 @@ def check_html(base, pages):
     bad = 0
     for path in pages:
         try:
-            body = urlopen(base + path, timeout=5).read().decode("utf-8", "replace")
+            response = urlopen(base + path, timeout=5)
         except HTTPError as exc:
-            body = exc.read().decode("utf-8", "replace")  # the error page counts
+            response = exc
         except Exception as exc:
             print("  ?? %-14s could not fetch: %s" % (path, exc))
             bad += 1
             continue
+        body = response.read().decode("utf-8", "replace")
 
         problems = [why for pat, why in HTML_RULES if re.search(pat, body, re.I)]
+        if response.status != ERRORS.get(path, 200):
+            problems.append("answered %d, so this is not the page" % response.status)
+        landed = urlparse(response.geturl()).path
+        if landed != urlparse(base + path).path:
+            problems.append("redirected to %s, so that is what was linted" % landed)
         if 'http-equiv="Content-Type"' not in body:
             problems.append("missing http-equiv Content-Type meta")
         if problems:
@@ -124,12 +137,14 @@ def check_css():
 
 
 def main():
-    base = (sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:5050").rstrip("/")
+    args = [arg for arg in sys.argv[1:] if arg != "--only"]
+    pages = [] if "--only" in sys.argv else list(PAGES)
+    base = (args[0] if args else "http://127.0.0.1:5050").rstrip("/")
     print("PS3 compatibility lint against %s\n" % base)
     print("stylesheets:")
     bad = check_css()
     print("\npages:")
-    bad += check_html(base, PAGES + sys.argv[2:])
+    bad += check_html(base, pages + args[1:])
     print("\n%s" % ("FAILED (%d)" % bad if bad else "all clear"))
     return 1 if bad else 0
 
