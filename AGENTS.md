@@ -64,7 +64,9 @@ the project root.
 - Run the suite after any change. It needs no hardware and does not touch
   `data/`; `DISCSTAKKA_DATA` points the whole app at a scratch directory.
 - After a UI change also run `ps3lint.py`, either against `fakerun.py` or
-  against a real server. `tests/test_ps3lint.py` does this for you.
+  against a real server. `tests/test_ps3lint.py` does this for you. A running
+  job changes what `/device` and that disc's pages serve, so lint with the unit
+  at rest, and pass `--only` with the paths a job changes to lint just those.
 - The simulated carousel is calibrated against the captured runs in
   `data/traces`. If you change its timings or state machine, keep
   `test_the_simulated_run_matches_a_captured_one` passing - it is the only
@@ -132,13 +134,22 @@ console you can't see.
   - Never send while BUSY.
 - Keep the retries in `require()`, the settle wait in `ingest()`, and the
   re-enumeration in `open()`.
+- Keep the bay check in `move_to()` and `reset()`. Turning the carousel with a
+  disc in the bay is how a disc gets hurt, and every move goes through those two.
+- An empty bay does not say where the disc went. No message may claim a disc is
+  back in its slot on that evidence. The unit does ack `0x05` (captured
+  2026-09-30), but `retract()` still judges by the bay, because a lost ack is a
+  retry away from a disc that was in fact put back.
 - `import hid`, enumerate, open and close all go through the hidapi thread in
   `transport.py`. On macOS hidapi ties its device manager to the thread that
   first imports it, and a request thread that has exited crashes the server
   with SIGTRAP. Reads and writes stay on the caller.
 - Keep `controller.keep_open()`. The unit resets every ~2.5 s unless it is
   polled and acknowledged, and Linux only polls a HID device that something has
-  open. Take the controller's `_device` lock after `_lock`, never before.
+  open. Take the controller's `_device` lock after `_lock`, never before, and
+  never wait for `_device` while holding `_lock`: every page render takes
+  `_lock` through `controller.current`, so a probe queued behind a job there
+  once stalled the whole site until the job finished.
 
 **Database**
 - A slot is occupied when a row references it. A disc that is checked out

@@ -1,0 +1,13 @@
+# Eject New Super Mario Brothers Wii (slot 1)  slot=1
+   0.07s  -- eject slot 1
+   0.13s  0001 [HOMED]
+   1.02s  8081 [BUSY HOMED]
+   3.12s  8481 [BUSY DISC_IN_BAY HOMED]
+   4.34s  0401 [DISC_IN_BAY HOMED]
+   4.63s  -- presented; waiting for it to be taken
+   5.82s  8281 [BUSY ACK_TIMEOUT HOMED]
+   5.82s  -- taken; returning to home
+   6.73s  0201 [ACK_TIMEOUT HOMED]
+   7.34s  8081 [BUSY HOMED]
+   8.85s  0001 [HOMED]
+   8.88s  -- end

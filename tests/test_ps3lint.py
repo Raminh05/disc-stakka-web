@@ -1,8 +1,12 @@
 """Run the PS3 lint against the simulated server.
 
-tools/ps3lint.py needs a live server, and one of the four pages it checks is
+tools/ps3lint.py needs a live server, and one of the pages it checks is
 /device, which talks to the unit. Until there was a simulated carousel that
 page could only be linted with hardware attached.
+
+A running job changes what is served: /device shows that it is busy and the
+pages of the disc being moved send the browser to the job. So the standing
+pages are linted with the unit at rest, and the job's own pages after.
 """
 
 import os
@@ -12,7 +16,8 @@ import sys
 import time
 import unittest
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -37,7 +42,20 @@ def wait_for(url, process, timeout=30.0):
 
 
 class Ps3Lint(unittest.TestCase):
-    def test_every_page_passes_including_the_device_page(self):
+    def lint(self, *args, **kwargs):
+        lint = subprocess.run(
+            [sys.executable, os.path.join("tools", "ps3lint.py")] + list(args),
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(
+            lint.returncode, kwargs.get("exits", 0), lint.stdout + lint.stderr
+        )
+        return lint.stdout
+
+    def test_every_page_passes_including_the_device_and_job_pages(self):
         port = free_port()
         base = "http://127.0.0.1:%d" % port
         server = subprocess.Popen(
@@ -58,15 +76,31 @@ class Ps3Lint(unittest.TestCase):
                 self.fail(
                     "the simulated server never answered on %s:\n%s" % (base, output)
                 )
-            lint = subprocess.run(
-                [sys.executable, os.path.join("tools", "ps3lint.py"), base],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                timeout=120,
+            at_rest = self.lint(base)
+            for path in ("/device", "/disc/1/delete", "/no-such-page"):
+                self.assertIn("ok   %s" % path, at_rest)
+
+            # The job page only exists while a job does. This ejects the first
+            # seeded disc from the simulated carousel, which moves nothing real,
+            # and follows the 303 to the page that polls it.
+            eject = urlopen(Request(base + "/disc/1/eject", data=b""), timeout=5)
+            job_path = urlparse(eject.geturl()).path
+            self.assertRegex(job_path, r"^/job/[\w-]+$")
+            busy = self.lint(base, "--only", "/device", job_path)
+            self.assertIn("ok   /device", busy)
+            self.assertIn("ok   %s" % job_path, busy)
+            self.assertNotIn("/add", busy)
+
+            # A page that is not the one asked for passes every markup rule,
+            # which is how a template goes unlinted without anyone noticing.
+            wrong = self.lint(
+                base, "--only", "/disc/99", "/disc/1/delete", "/job/gone", exits=1
             )
-            self.assertEqual(lint.returncode, 0, lint.stdout + lint.stderr)
-            self.assertIn("/device", lint.stdout)
+            self.assertIn("FAIL /disc/99", wrong)
+            self.assertIn("answered 404", wrong)
+            self.assertIn("FAIL /disc/1/delete", wrong)
+            self.assertIn("redirected to %s" % job_path, wrong)
+            self.assertIn("FAIL /job/gone", wrong)
         finally:
             server.terminate()
             try:

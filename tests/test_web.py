@@ -68,6 +68,14 @@ class Pages(WebTest):
         self.assertIn("%08x" % self.unit.serial, page)
         self.assertIn("02.17.0079", page)
 
+    def test_the_activity_list_says_why_as_well_as_which_disc(self):
+        disc_id = self.disc()
+        db.log_event(self.conn, "failed", disc_id, 3, "eject found no disc")
+        self.conn.commit()
+        page = self.body("/device")
+        self.assertIn("Katamari Damacy: eject found no disc", page)
+        self.assertNotIn("Katamari Damacy: Katamari Damacy", page)
+
     def test_the_device_page_still_renders_with_no_unit(self):
         self.io.unplug()
         self.assertEqual(self.client.get("/device").status_code, 200)
@@ -92,10 +100,66 @@ class Methods(WebTest):
         for path in (
             "/disc/%d/eject" % disc_id,
             "/disc/%d/return" % disc_id,
+            "/disc/%d/mark-out" % disc_id,
+            "/disc/%d/mark-stored" % disc_id,
             "/device/reset",
             "/device/reconnect",
         ):
             self.assertEqual(self.client.get(path).status_code, 405, path)
+
+
+class Corrections(WebTest):
+    """Putting the catalogue right by hand after the unit lost track."""
+
+    def status(self, disc_id):
+        return db.get_disc(self.conn, disc_id)["status"]
+
+    def test_a_disc_taken_late_can_be_marked_out_and_then_returned(self):
+        disc_id = self.disc()
+        response = self.client.post("/disc/%d/mark-out" % disc_id)
+        self.assertEqual(response.status_code, 303)
+        self.assertRegex(response.headers["Location"], r"/disc/%d$" % disc_id)
+        self.assertEqual(self.status(disc_id), db.OUT)
+        self.assertEqual(db.get_disc(self.conn, disc_id)["slot"], 3)
+        self.assertIn("Put this disc back", self.body("/disc/%d" % disc_id))
+
+        self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(self.status(disc_id), db.STORED)
+        self.assertEqual(
+            [(e["kind"], e["detail"]) for e in db.recent_events(self.conn, 2)],
+            [("manual", "marked as in its slot"), ("manual", "marked as taken out")],
+        )
+
+    def test_nothing_is_sent_to_the_unit(self):
+        disc_id = self.disc()
+        self.client.post("/disc/%d/mark-out" % disc_id)
+        self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(self.io.writes, [])
+        self.assertIsNone(self.controller.current)
+
+    def test_marking_what_is_already_so_changes_nothing(self):
+        disc_id = self.disc()
+        events = len(db.recent_events(self.conn, 50))
+        response = self.client.post("/disc/%d/mark-stored" % disc_id)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(len(db.recent_events(self.conn, 50)), events)
+
+    def test_a_disc_the_unit_is_working_on_is_left_alone(self):
+        disc_id = self.disc()
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.disc_id = disc_id
+        try:
+            response = self.client.post("/disc/%d/mark-out" % disc_id)
+            self.assertRegex(response.headers["Location"], r"/job/%s$" % job.id)
+            self.assertEqual(self.status(disc_id), db.STORED)
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_missing_disc_is_a_404(self):
+        self.assertEqual(self.client.post("/disc/99/mark-out").status_code, 404)
 
 
 class Jobs(WebTest):
@@ -120,17 +184,23 @@ class Jobs(WebTest):
             self.assertTrue(
                 REFRESH.search(page), "a running job must keep the page refreshing"
             )
+            self.assertIn(
+                '<meta name="job-phase" content="moving">',
+                page,
+                "enhance.js seeds its idea of the phase from this tag",
+            )
         finally:
             jobs_stub.hold.set()
         _wait(job)
-        self.assertFalse(
-            REFRESH.search(self.body("/job/%s" % job.id)),
-            "a finished job must stop refreshing",
-        )
+        page = self.body("/job/%s" % job.id)
+        self.assertFalse(REFRESH.search(page), "a finished job must stop refreshing")
+        self.assertNotIn('name="job-phase"', page)
 
-    def test_a_browser_that_can_poll_gets_only_a_slow_refresh(self):
+    def test_a_browser_that_polls_the_json_view_gets_only_a_slow_refresh(self):
         # enhance.js cannot cancel a meta refresh the parser has already
-        # scheduled, so the server has to stop sending the fast one.
+        # scheduled, so the server has to stop sending the fast one. The JSON
+        # view vouches for the browser, briefly, so a browser that stops
+        # polling does not stay on the slow refresh.
         interval = re.compile(r'content="(\d+);url=')
         job = self.controller.submit(
             stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
@@ -138,11 +208,77 @@ class Jobs(WebTest):
         try:
             page = self.body("/job/%s" % job.id)
             self.assertEqual(interval.search(page).group(1), "2")
-            self.client.set_cookie("xhr", "1")
+            cookie = self.client.get("/job/%s.json" % job.id).headers["Set-Cookie"]
+            self.assertIn("polls=1", cookie)
+            self.assertIn("Max-Age=%d" % app_module.XHR_COOKIE_S, cookie)
             page = self.body("/job/%s" % job.id)
             self.assertEqual(
                 interval.search(page).group(1), str(app_module.XHR_FALLBACK_S)
             )
+            self.client.delete_cookie("polls")
+            self.assertEqual(
+                interval.search(self.body("/job/%s" % job.id)).group(1), "2"
+            )
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_an_eject_page_that_polls_still_refreshes_within_the_take_window(self):
+        # The take prompt is up for five seconds. A safety net slower than that
+        # shows a browser whose polling has died only the retraction.
+        interval = re.compile(r'content="(\d+);url=')
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.kind = "eject"
+        try:
+            self.client.set_cookie("polls", "1")
+            page = self.body("/job/%s" % job.id)
+            self.assertEqual(
+                interval.search(page).group(1), str(app_module.EJECT_FALLBACK_S)
+            )
+            self.assertLessEqual(
+                app_module.EJECT_FALLBACK_S * 2000,
+                protocol.TAKE_WINDOW_MS,
+                "a refresh counts from the end of the load, so it needs room",
+            )
+            job.set_phase("retracting", "Not taken - putting it back...")
+            self.assertEqual(
+                interval.search(self.body("/job/%s" % job.id)).group(1),
+                str(app_module.XHR_FALLBACK_S),
+                "nothing is left to catch once the window has closed",
+            )
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_disc_the_unit_is_working_on_cannot_be_deleted(self):
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.disc_id = self.disc_id
+        try:
+            response = self.client.post(
+                "/disc/%d/delete" % self.disc_id, data={"confirm": "yes"}
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertRegex(response.headers["Location"], r"/job/%s$" % job.id)
+            self.assertIsNotNone(db.get_disc(self.conn, self.disc_id))
+        finally:
+            stub.hold.set()
+        _wait(job)
+
+    def test_a_slot_the_unit_is_working_on_cannot_be_reconciled_by_hand(self):
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.slot = 9
+        try:
+            response = self.client.post(
+                "/reconcile/manual", data={"slot": "9", "title": "Ico"}
+            )
+            self.assertEqual(response.status_code, 303)
+            self.assertIsNone(db.get_by_slot(self.conn, 9))
         finally:
             stub.hold.set()
         _wait(job)
@@ -158,6 +294,28 @@ class Jobs(WebTest):
         finally:
             first.hold.set()
         _wait(job)
+
+    def test_a_slot_outside_the_carousel_is_refused_not_a_500(self):
+        for slot in ("0", "101", "-3", "", "seven"):
+            response = self.client.post(
+                "/reconcile/manual", data={"slot": slot, "title": "Ico"}
+            )
+            self.assertEqual(response.status_code, 303, slot)
+            self.assertRegex(response.headers["Location"], r"/reconcile$")
+
+            response = self.client.post("/add", data={"slot": slot})
+            self.assertEqual(response.status_code, 303, slot)
+            self.assertRegex(response.headers["Location"], r"/add$")
+        self.assertEqual(db.count_discs(self.conn), 1)
+        self.assertIsNone(self.controller.current, "a refused slot started a job")
+
+    def test_the_json_view_is_never_cached(self):
+        job = self.controller.submit(
+            _Stub(), lambda ds, conn, job, trace: job.succeed("done")
+        )
+        _wait(job)
+        response = self.client.get("/job/%s.json" % job.id)
+        self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_the_json_view_matches_the_snapshot(self):
         job = self.controller.submit(

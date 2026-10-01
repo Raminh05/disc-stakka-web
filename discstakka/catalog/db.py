@@ -253,7 +253,7 @@ def update_disc(conn, disc_id, **fields):
         conn.execute("UPDATE disc SET %s WHERE id = ?" % ", ".join(sets), args)
 
 
-def mark_out(conn, disc_id):
+def mark_out(conn, disc_id, kind="ejected", detail=None):
     now = _now()
     with conn:
         conn.execute(
@@ -262,10 +262,10 @@ def mark_out(conn, disc_id):
             (OUT, now, now, disc_id),
         )
         row = get_disc(conn, disc_id)
-        log_event(conn, "ejected", disc_id, row["slot"] if row else None)
+        log_event(conn, kind, disc_id, row["slot"] if row else None, detail)
 
 
-def mark_stored(conn, disc_id, kind="returned"):
+def mark_stored(conn, disc_id, kind="returned", detail=None):
     now = _now()
     with conn:
         conn.execute(
@@ -274,7 +274,7 @@ def mark_stored(conn, disc_id, kind="returned"):
             (STORED, now, disc_id),
         )
         row = get_disc(conn, disc_id)
-        log_event(conn, kind, disc_id, row["slot"] if row else None)
+        log_event(conn, kind, disc_id, row["slot"] if row else None, detail)
 
 
 def delete_disc(conn, disc_id):

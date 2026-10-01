@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS event (
     id      INTEGER PRIMARY KEY,
     disc_id INTEGER REFERENCES disc(id) ON DELETE SET NULL,
     slot    INTEGER,
-    kind    TEXT NOT NULL,   -- added|ejected|returned|retracted|manual|removed|failed
+    kind    TEXT NOT NULL,   -- added|ejected|returned|retracted|reset|manual|removed|failed
     detail  TEXT,
     at      TEXT NOT NULL
 );

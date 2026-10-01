@@ -9,51 +9,62 @@
 (function () {
     "use strict";
 
-    if (!document || !document.getElementById || !window.XMLHttpRequest) { return; }
+    if (!document || !document.getElementById || !window.XMLHttpRequest || !window.JSON) { return; }
 
-    var meta = null, tags = document.getElementsByTagName("meta"), i;
+    var meta = null, phase = null, tags = document.getElementsByTagName("meta"), i;
     for (i = 0; i < tags.length; i++) {
         if ((tags[i].getAttribute("http-equiv") || "").toLowerCase() === "refresh") {
             meta = tags[i];
+        } else if (tags[i].getAttribute("name") === "job-phase") {
+            phase = tags[i].getAttribute("content");
         }
     }
-    if (!meta) { return; }  /* terminal job page, or not a job page at all */
+    if (!meta || !phase) { return; }  /* terminal job page, or not a job page at all */
 
     var match = /url=(.+)$/i.exec(meta.getAttribute("content") || "");
     if (!match) { return; }
     var url = match[1];
 
-    /* Poll JSON and only reload when the phase actually changes. Removing the
-       meta tag here would not help: the parser has already scheduled its
-       refresh. Instead the cookie tells the server this browser can poll, and
-       from the next load it sends a slow refresh as a safety net only. */
-    var proven = false;
-    var phase = null;
+    /* Poll JSON and reload once the job leaves the phase this page was
+       rendered with. Removing the meta tag here would not help: the parser has
+       already scheduled its refresh. Instead each JSON reply sets a short-lived
+       cookie telling the server this browser can poll, and from the next load
+       it sends a slow refresh as a safety net only. The first poll goes out at
+       once so the cookie is in place before a 1 s refresh fires. A poll that
+       fails is simply tried again a second later: the meta refresh is the
+       safety net, and reloading on error would loop as fast as the server
+       could answer. A 404 is not that kind of failure: the server no longer
+       knows the job, and the page it sends instead is not a job page, so
+       going there cannot loop. */
+    function later() { window.setTimeout(poll, 1000); }
+
+    function setText(id, text) {
+        var el = document.getElementById(id);
+        if (el && el.firstChild) { el.firstChild.nodeValue = text; }
+    }
+
     function poll() {
         var xhr = new XMLHttpRequest();
         xhr.open("GET", url + ".json", true);
+        xhr.timeout = 5000;  /* a stalled poll reports status 0 below */
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== 4) { return; }
-            if (xhr.status !== 200) { window.location.href = url; return; }
+            if (xhr.status === 404) { window.location.href = url; return; }
+            if (xhr.status !== 200) { later(); return; }
             var data;
             try { data = JSON.parse(xhr.responseText); }
-            catch (e) { window.location.href = url; return; }
+            catch (e) { later(); return; }
 
-            if (!proven) {
-                proven = true;
-                try { document.cookie = "xhr=1; path=/; max-age=31536000"; } catch (e) {}
-            }
-            if (phase === null) { phase = data.phase; }
             if (data.phase !== phase || data.done) { window.location.href = url; return; }
 
-            var el = document.getElementById("countdown");
-            if (el && data.remaining !== null) {
-                el.firstChild.nodeValue = data.remaining + " second"
-                    + (data.remaining === 1 ? "" : "s") + " left";
+            if (data.message) { setText("message", data.message); }
+            if (data.remaining !== null) {
+                setText("countdown", data.remaining + " second"
+                    + (data.remaining === 1 ? "" : "s") + " left");
             }
-            window.setTimeout(poll, 1000);
+            later();
         };
-        try { xhr.send(null); } catch (e) { window.location.href = url; }
+        try { xhr.send(null); } catch (e) { later(); }
     }
-    window.setTimeout(poll, 1000);
+    poll();
 }());

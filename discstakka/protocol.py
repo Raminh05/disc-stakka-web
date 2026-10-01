@@ -382,6 +382,7 @@ class DiscStakka(object):
         self.command(CMD_CLEAR_ERR_2)
         if not self.wait_idle():
             raise DeviceError("unit stayed busy; it may need a power cycle")
+        self._refuse_with_a_disc_out()
 
         self.command(CMD_SET_LED, 1, 1)
         _report(progress, "Homing carousel...")
@@ -395,11 +396,18 @@ class DiscStakka(object):
             raise ValueError("slot %r out of range 0-%d" % (slot, SLOT_MAX))
         if not self.wait_idle():
             raise DeviceError("unit is busy")
+        self._refuse_with_a_disc_out()
         if slot != HOME:
             self.ensure_homed(progress)
         self.require(CMD_SET_POS, slot, 1 if eject else 0)
         if not self.wait_idle():
             raise DeviceError("timed out moving to slot %d" % slot)
+
+    def _refuse_with_a_disc_out(self):
+        # Rotating with a disc in the bay is how it gets hurt. Every move comes
+        # through here, so no caller has to remember.
+        if self.disc_in_bay():
+            raise DeviceError("There is a disc in the bay. Take it out first.")
 
     def park(self, progress=None):
         _report(progress, "Returning to home...")
@@ -444,10 +452,25 @@ class DiscStakka(object):
             raise DeviceError("timed out taking the disc in")
 
     def retract(self, progress=None):
+        """Returns whether the unit acknowledged ``0x05``, for the trace."""
         _report(progress, "Retracting disc...")
         self.wait_idle(NOW_MS)  # best effort; retract anyway if still busy
-        self.command(CMD_RETRACT)
-        self.wait_idle()
+        acked = True
+        try:
+            self.require(CMD_RETRACT)
+        except NotConnected:
+            raise
+        except DeviceError:
+            # The unit does ack 0x05, but a lost ack is still not a lost
+            # retract, so a missing one proves nothing. The bay sensor decides.
+            acked = False
+        if not self.wait_idle():
+            raise DeviceError("timed out taking the disc back")
+        if self.disc_in_bay():
+            raise DeviceError(
+                "the unit did not take the disc back; it is still in the bay"
+            )
+        return acked
 
     def set_led(self, on_time=1, period=1):
         self.command(CMD_SET_LED, on_time, period)

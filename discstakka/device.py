@@ -12,13 +12,21 @@ device and they would fight over it.
 What a job actually does lives in :mod:`discstakka.flows`.
 """
 
+import contextlib
+import sqlite3
 import threading
 import time
 import traceback
 
 from . import jobs
 from .catalog import db
-from .protocol import DeviceError, DiscStakka, NotConnected, describe_status
+from .protocol import (
+    ST_ACK_TIMEOUT,
+    DeviceError,
+    DiscStakka,
+    NotConnected,
+    describe_status,
+)
 from .trace import NullTrace, Trace
 
 
@@ -33,6 +41,8 @@ class Busy(Exception):
 class DeviceController(object):
     """Owns the unit, and runs one job at a time against it."""
 
+    CLAIM_TIMEOUT_S = 5
+
     def __init__(self, ds=None, db_path=None, trace_dir=None):
         self._ds = ds if ds is not None else DiscStakka()
         self._db_path = db_path
@@ -42,6 +52,7 @@ class DeviceController(object):
         #: Taken after _lock, never before it.
         self._device = threading.Lock()
         self._current = None
+        self._open_error = None
         self.registry = jobs.JobRegistry()
 
     # -- introspection ---------------------------------------------------
@@ -57,37 +68,64 @@ class DeviceController(object):
     def info(self):
         """Header/status summary. Never raises - the UI must render regardless."""
         job = self.current
-        out = {
+        # Read once: the worker's close() can null these between two reads.
+        serial, firmware = self._ds.serial, self._ds.firmware
+        return {
             "present": self._ds.present(),
             "connected": self._ds.connected,
-            "serial": None,
-            "firmware": None,
+            "serial": "%08x" % serial if serial is not None else None,
+            "firmware": firmware,
             "busy_job": job.id if job else None,
             "error": None,
         }
-        if self._ds.connected:
-            out["serial"] = "%08x" % self._ds.serial if self._ds.serial else None
-            out["firmware"] = self._ds.firmware
-        return out
+
+    @contextlib.contextmanager
+    def _claimed(self):
+        """Hold the unit for a one-off, or raise Busy at once.
+
+        Never waits on _device while holding _lock: every page render takes
+        _lock through ``current``, so a request that queued behind a running
+        job here used to stall the whole site until the job finished.
+        """
+        job = self.current
+        if job is not None:
+            raise Busy(job)
+        # Whoever holds it now is the keeper, or a job that started since the
+        # check above and will hold it for as long as it runs.
+        if not self._device.acquire(timeout=self.CLAIM_TIMEOUT_S):
+            job = self.current
+            if job is not None:
+                raise Busy(job)
+            # The keeper holds it for as long as a unit that will not answer
+            # takes to give up on, and what it last hit is the real fault.
+            if self._open_error is not None:
+                raise DeviceError(
+                    "The unit is not answering (%s). Still trying to reach it."
+                    % self._open_error
+                )
+            raise DeviceError("the unit is in use; try again in a moment")
+        try:
+            yield
+        finally:
+            self._device.release()
 
     def reconnect(self):
-        with self._lock:
-            if self._current is not None and not self._current.done:
-                raise Busy(self._current)
-            with self._device:
-                self._ds.reconnect()
+        with self._claimed():
+            self._ds.reconnect()
 
     def probe(self):
         """One-shot status read for the diagnostics page."""
-        with self._lock, self._device:
-            if self._current is not None and not self._current.done:
-                raise Busy(self._current)
+        with self._claimed():
             self._ds.open()
+            status = self._ds.status()
+            # 0x14 is the only way to read the position and it clears a
+            # latched error, which this page exists to show.
+            latched = status & ST_ACK_TIMEOUT
             return {
                 "serial": "%08x" % self._ds.serial,
                 "firmware": self._ds.firmware,
-                "position": self._ds.position(),
-                "status": describe_status(self._ds.status()),
+                "position": None if latched else self._ds.position(),
+                "status": describe_status(status),
             }
 
     # -- keeping the unit alive ------------------------------------------
@@ -119,12 +157,11 @@ class DeviceController(object):
         if not self._device.acquire(blocking=False):
             return
         try:
-            if self._ds.connected and self._ds.alive():
-                return
-            if self._ds.present():
+            if not (self._ds.connected and self._ds.alive()) and self._ds.present():
                 self._ds.open()
-        except DeviceError:
-            pass
+            self._open_error = None
+        except DeviceError as exc:
+            self._open_error = exc
         except Exception:  # pragma: no cover - keep the keeper alive
             traceback.print_exc()
         finally:
@@ -152,6 +189,16 @@ class DeviceController(object):
         except OSError:
             return NullTrace()  # evidence is never a reason to fail the job
 
+    def _log_failure(self, conn, job, exc):
+        if conn is None:
+            return
+        try:
+            conn.rollback()
+            db.log_event(conn, "failed", job.disc_id, job.slot, str(exc))
+            conn.commit()
+        except sqlite3.Error:
+            pass  # the job's own failure is what the user has to see
+
     def _run(self, job, runner, args):
         with self._device:
             self._run_owned(job, runner, args)
@@ -165,11 +212,14 @@ class DeviceController(object):
             conn = db.connect(self._db_path)
             runner(self._ds, conn, job, trace, *args)
         except NotConnected as exc:
+            self._log_failure(conn, job, exc)
             job.fail("Lost the Disc Stakka: %s" % exc)
         except DeviceError as exc:
+            self._log_failure(conn, job, exc)
             job.fail(str(exc))
         except Exception as exc:  # pragma: no cover - last-resort guard
             traceback.print_exc()
+            self._log_failure(conn, job, exc)
             job.fail("Unexpected error: %s" % exc)
         finally:
             self._ds.trace = None

@@ -17,6 +17,7 @@ from flask import (
     Flask,
     abort,
     flash,
+    make_response,
     redirect,
     render_template,
     request,
@@ -93,6 +94,22 @@ def inject_globals():
     }
 
 
+def job_using(disc_id=None, slot=None):
+    """The running job that references this disc or slot, if any.
+
+    A catalogue write that races such a job lands after the carousel has
+    already acted, and the job's own final write then fails on it.
+    """
+    job = controller.current
+    if job is None:
+        return None
+    if disc_id is not None and job.disc_id == disc_id:
+        return job
+    if slot is not None and job.slot == slot:
+        return job
+    return None
+
+
 def start_job(job, runner, *args):
     """Submit a job, or bounce to the one already running."""
     try:
@@ -121,6 +138,19 @@ def _int_arg(name, default):
         return int(request.args.get(name, default))
     except (TypeError, ValueError):
         return default
+
+
+def _form_slot():
+    """The slot the form names, or None with the reason already flashed."""
+    try:
+        slot = int(request.form.get("slot", ""))
+    except ValueError:
+        flash("Pick a slot.", "error")
+        return None
+    if not (SLOT_MIN <= slot <= SLOT_MAX):
+        flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+        return None
+    return slot
 
 
 # -- catalogue -----------------------------------------------------------
@@ -234,6 +264,10 @@ def disc_delete(disc_id):
         disc = db.get_disc(c, disc_id)
         if disc is None:
             abort(404)
+        job = job_using(disc_id, disc["slot"])
+        if job is not None:
+            flash("The unit is working on that disc. Wait for it to finish.", "warn")
+            return see_other(url_for("job_page", job_id=job.id))
         # Only the confirmation form's field deletes, so a stray or repeated
         # POST lands on the confirmation page instead.
         if request.method != "POST" or request.form.get("confirm") != "yes":
@@ -312,13 +346,8 @@ def add():
     c = conn()
     try:
         if request.method == "POST":
-            try:
-                slot = int(request.form.get("slot", ""))
-            except ValueError:
-                flash("Pick a slot.", "error")
-                return see_other(url_for("add"))
-            if not (SLOT_MIN <= slot <= SLOT_MAX):
-                flash("Slots run from %d to %d." % (SLOT_MIN, SLOT_MAX), "error")
+            slot = _form_slot()
+            if slot is None:
                 return see_other(url_for("add"))
             if db.get_by_slot(c, slot) is not None:
                 flash("Slot %d is already spoken for." % slot, "error")
@@ -338,6 +367,17 @@ def add():
 #: scheduled survives the tag being removed, so the script cannot switch it off.
 XHR_FALLBACK_S = 10
 
+#: An eject presents the disc for only TAKE_WINDOW_MS, so until the disc is
+#: taken its safety net has to land inside that window with time to spare, or a
+#: page whose polling has died shows the prompt as it expires. A refresh counts
+#: from the end of the page load, so one as long as the window always misses.
+EJECT_FALLBACK_S = 2
+EJECT_WATCHED = (jobs.MOVING, jobs.PRESENTED)
+
+#: How long one JSON poll vouches for the browser. Every poll renews it, so a
+#: browser that stops polling is back on the fast refresh within seconds.
+XHR_COOKIE_S = 5
+
 
 @app.route("/job/<job_id>", methods=["GET", "POST"])
 def job_page(job_id):
@@ -346,10 +386,12 @@ def job_page(job_id):
         flash("That job is no longer being tracked.", "warn")
         return see_other(url_for("index"))
     snap = job.snapshot()
-    if request.cookies.get("xhr") == "1":
-        refresh_s = XHR_FALLBACK_S
-    else:
+    if request.cookies.get("polls") != "1":
         refresh_s = 1 if snap["prompting"] else 2
+    elif snap["kind"] == "eject" and snap["phase"] in EJECT_WATCHED:
+        refresh_s = EJECT_FALLBACK_S
+    else:
+        refresh_s = XHR_FALLBACK_S
     return render_template("job.html", job=snap, refresh_s=refresh_s)
 
 
@@ -416,10 +458,8 @@ def reconcile_manual():
     """
     c = conn()
     try:
-        try:
-            slot = int(request.form.get("slot", ""))
-        except ValueError:
-            flash("Pick a slot.", "error")
+        slot = _form_slot()
+        if slot is None:
             return see_other(url_for("reconcile"))
         title = (request.form.get("title") or "").strip()
         if not title:
@@ -428,10 +468,60 @@ def reconcile_manual():
         if db.get_by_slot(c, slot) is not None:
             flash("Slot %d already has an entry." % slot, "error")
             return see_other(url_for("reconcile"))
+        if job_using(slot=slot) is not None:
+            flash(
+                "The unit is working on slot %d. Wait for it to finish." % slot, "error"
+            )
+            return see_other(url_for("reconcile"))
 
         disc_id = db.create_disc(c, slot, title, kind="manual")
         flash("Recorded “%s” in slot %d." % (title, slot), "ok")
         return see_other(url_for("disc_edit", disc_id=disc_id))
+    finally:
+        c.close()
+
+
+@app.route("/disc/<int:disc_id>/mark-out", methods=["POST"])
+def disc_mark_out(disc_id):
+    return _correct(disc_id, db.OUT)
+
+
+@app.route("/disc/<int:disc_id>/mark-stored", methods=["POST"])
+def disc_mark_stored(disc_id):
+    return _correct(disc_id, db.STORED)
+
+
+def _correct(disc_id, status):
+    """Say where a disc really is, without moving the carousel.
+
+    The unit reports an empty bay, never where the disc went, so a disc taken
+    late or put back by hand leaves the catalogue wrong with no job to fix it.
+    """
+    c = conn()
+    try:
+        disc = db.get_disc(c, disc_id)
+        if disc is None:
+            abort(404)
+        job = job_using(disc_id, disc["slot"])
+        if job is not None:
+            flash("The unit is working on that disc. Wait for it to finish.", "warn")
+            return see_other(url_for("job_page", job_id=job.id))
+        if disc["status"] == status:
+            flash("The catalogue already says that.", "warn")
+        elif status == db.OUT:
+            db.mark_out(c, disc_id, kind="manual", detail="marked as taken out")
+            flash(
+                "“%s” is now listed as checked out. Slot %d is held for its "
+                "return." % (disc["title"], disc["slot"]),
+                "ok",
+            )
+        else:
+            db.mark_stored(c, disc_id, kind="manual", detail="marked as in its slot")
+            flash(
+                "“%s” is now listed as in slot %d." % (disc["title"], disc["slot"]),
+                "ok",
+            )
+        return see_other(url_for("disc_page", disc_id=disc_id))
     finally:
         c.close()
 
@@ -444,7 +534,10 @@ def job_json(job_id):
     job = controller.registry.get(job_id)
     if job is None:
         return {"error": "unknown job"}, 404
-    return job.snapshot()
+    response = make_response(job.snapshot())
+    response.headers["Cache-Control"] = "no-store"
+    response.set_cookie("polls", "1", max_age=XHR_COOKIE_S)
+    return response
 
 
 @app.errorhandler(404)

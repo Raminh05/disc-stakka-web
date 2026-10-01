@@ -16,7 +16,7 @@
 <table class="facts" cellspacing="0" cellpadding="0">
 <tr><th>Serial</th><td>{{ probe.serial }}</td></tr>
 <tr><th>Firmware</th><td>{{ probe.firmware }}</td></tr>
-<tr><th>Position</th><td>slot {{ probe.position }}</td></tr>
+<tr><th>Position</th><td>{% if probe.position is none %}unknown while an error is latched; Reset clears it{% else %}slot {{ probe.position }}{% endif %}</td></tr>
 <tr><th>Status</th><td><code>{{ probe.status }}</code></td></tr>
 </table>
 {% elif not error %}
@@ -53,7 +53,7 @@ home. Safe to run whenever the unit seems confused.</p>
 {% for e in events %}
 <tr><td>{{ e.at.replace('T', ' ') }}</td><td>{{ e.kind }}</td>
     <td>{{ e.slot if e.slot is not none else '' }}</td>
-    <td>{{ e.title or e.detail or '' }}</td></tr>
+    <td>{{ e.title or e.detail or '' }}{% if e.title and e.detail and e.detail != e.title %}: {{ e.detail }}{% endif %}</td></tr>
 {% endfor %}
 </table>
 {% endif %}

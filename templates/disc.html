@@ -50,6 +50,19 @@
     <td><form method="get" action="{{ url_for('disc_delete', disc_id=disc.id) }}">
       <input type="submit" value="Remove from catalogue" class="danger"></form></td>
   </tr></table>
+
+  <h2>Catalogue out of step?</h2>
+  {% if disc.status == 'out' %}
+    <p class="hint">If this disc is already back in slot {{ disc.slot }}, say so
+    here. The carousel does not move.</p>
+    <form method="post" action="{{ url_for('disc_mark_stored', disc_id=disc.id) }}">
+      <input type="submit" value="Mark as back in its slot"></form>
+  {% else %}
+    <p class="hint">If this disc is in your hand and not in slot {{ disc.slot }},
+    say so here. The carousel does not move.</p>
+    <form method="post" action="{{ url_for('disc_mark_out', disc_id=disc.id) }}">
+      <input type="submit" value="Mark as taken out"></form>
+  {% endif %}
 </td>
 </tr></table>
 {% endblock %}
