@@ -22,6 +22,8 @@ one of each kind kept under tests/fixtures):
   idle blip   ~0.30 s every ~3 s, even at rest
   ingest      disc at aperture, 1.5 s busy drawing it off, then NEW_DISC_ACK
               for 1.8 s more before the unit goes idle and will hear 0x1D
+  present     DISC_IN_BAY comes on as the carousel arrives, ~1.2 s before the
+              unit reports idle
   take        the bay clears with ACK_TIMEOUT and BUSY for ~0.9 s; the flag
               stays until the next move
   retract     ~3.6 s busy, the bay clearing half way through; afterwards the
@@ -99,6 +101,7 @@ BLIP_CHANCE = 0.1
 APERTURE_MS = 1_500  # disc seen -> drawn off the aperture, NEW_DISC_ACK set
 SETTLE_MS = 1_800  # NEW_DISC_ACK set -> unit idle and able to hear 0x1D
 INGEST_MS = 1_800  # 0x1D acknowledged -> disc in the slot
+PUSH_MS = 500  # an eject move runs this much longer before the bay sees the disc
 BAY_MS = 1_200  # present
 TAKE_MS = 900  # the bay clears; BUSY and ACK_TIMEOUT while the unit notices
 RETRACT_MS = 3_600  # 0x05 heard -> idle; the bay clears at RETRACT_BAY_MS
@@ -305,14 +308,20 @@ class Carousel(object):
     def _cmd_04(self, args):
         target, eject = args[0], args[1]
         travel = self.seek_ms(target)
-        self._work_for(travel)
+        presenting = eject and target in self.occupied
+        if presenting:
+            travel += PUSH_MS
+        # The bay reports the disc as the carousel arrives, while the unit is
+        # still busy pushing it out. Every captured eject reads BUSY+DISC_IN_BAY
+        # for about 1.2 s before DISC_IN_BAY alone.
+        self._work_for(travel + (BAY_MS if presenting else 0))
         self.ack_timeout = False
         self.retracted = False
 
         def arrived():
             self.position = target
             self.homed = True
-            if eject and target in self.occupied:
+            if presenting:
                 self.occupied.discard(target)
                 self.disc_in_bay = True
 
@@ -322,13 +331,17 @@ class Carousel(object):
     def _cmd_05(self, args):
         self._work_for(RETRACT_MS)
 
-        def retracted():
+        def back_in_slot():
             if self.disc_in_bay:
                 self.disc_in_bay = False
                 self.occupied.add(self.position)
-                self.retracted = True
+                self.after(RETRACT_MS - RETRACT_BAY_MS, settled)
 
-        self.after(RETRACT_BAY_MS, retracted)
+        def settled():
+            # The captures show 0x0100 only once the unit is idle again.
+            self.retracted = True
+
+        self.after(RETRACT_BAY_MS, back_in_slot)
         return (0, 0, 0, 0)
 
     def _cmd_06(self, args):

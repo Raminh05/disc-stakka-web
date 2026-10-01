@@ -50,6 +50,15 @@ def signature(path):
     return tuple(out)
 
 
+def first_word_with(path, flag):
+    """The first status word in a trace that carries ``flag``, as decoded."""
+    with open(path) as fh:
+        for line in fh:
+            if STATUS_LINE.match(line) and flag in line:
+                return line.split("  ", 2)[-1].strip()
+    return None
+
+
 class FlowTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="discstakka-test-")
@@ -322,8 +331,13 @@ class Eject(FlowTest):
         )
         flows.run_eject(self.ds, self.conn, job, job.trace, self.disc_id)
 
-        captured = signature(os.path.join(FIXTURES, "eject-1790806244-12.log"))
-        self.assertEqual(signature(self.only_trace()), captured)
+        captured = os.path.join(FIXTURES, "eject-1790806244-12.log")
+        self.assertEqual(signature(self.only_trace()), signature(captured))
+        self.assertEqual(
+            first_word_with(self.only_trace(), "DISC_IN_BAY"),
+            first_word_with(captured, "DISC_IN_BAY"),
+            "the bay reports the disc while the unit is still busy presenting it",
+        )
         self.assertTrue(job.snapshot()["ok"])
 
     def test_the_simulated_retract_matches_a_captured_one(self):
