@@ -137,8 +137,9 @@ console you can't see.
 - Keep the bay check in `move_to()` and `reset()`. Turning the carousel with a
   disc in the bay is how a disc gets hurt, and every move goes through those two.
 - An empty bay does not say where the disc went. No message may claim a disc is
-  back in its slot on that evidence, and `retract()` judges by the bay because
-  the unit's answer to `0x05` has never been captured.
+  back in its slot on that evidence. The unit does ack `0x05` (captured
+  2026-09-30), but `retract()` still judges by the bay, because a lost ack is a
+  retry away from a disc that was in fact put back.
 - `import hid`, enumerate, open and close all go through the hidapi thread in
   `transport.py`. On macOS hidapi ties its device manager to the thread that
   first imports it, and a request thread that has exited crashes the server

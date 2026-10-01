@@ -31,8 +31,9 @@ Nearly every load and return shares one status signature - HOMED,
 DISC_WAITING+HOMED, NEW_DISC_ACK+HOMED, HOMED - and so do the ejects, taken or
 retracted. test_flows calibrates against one capture of each.
 
-What the unit answers to 0x05, if anything, is still not known: the traces
-record status polls, not acks. The zero-byte reply here is a guess.
+The unit acks 0x05 (a trace marked "retract acknowledged" on 2026-09-30). What
+bytes the ack carries is not recorded, so the zeros here are a guess; nothing
+reads them.
 """
 
 import heapq

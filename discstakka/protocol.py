@@ -461,8 +461,8 @@ class DiscStakka(object):
         except NotConnected:
             raise
         except DeviceError:
-            # No capture shows what the unit answers to 0x05, if anything, so a
-            # missing ack proves nothing either way. The bay sensor decides.
+            # The unit does ack 0x05, but a lost ack is still not a lost
+            # retract, so a missing one proves nothing. The bay sensor decides.
             acked = False
         if not self.wait_idle():
             raise DeviceError("timed out taking the disc back")
