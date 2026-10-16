@@ -23,8 +23,9 @@ from urllib.request import urlopen
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-#: Every template but job.html. The disc pages assume the first disc still
-#: exists, which it does on fakerun's seed; the last path is the error page.
+#: Every template but job.html. The disc pages assume fakerun's seed: disc 1 on
+#: its own, and a set led by disc 5 with disc 6 in it. The last path is the
+#: error page.
 PAGES = [
     "/",
     "/?view=list",
@@ -34,6 +35,11 @@ PAGES = [
     "/disc/1",
     "/disc/1/edit",
     "/disc/1/delete",
+    "/disc/5",
+    "/disc/5/delete",
+    "/disc/6",
+    "/disc/6/edit",
+    "/add?set=5",
     "/no-such-page",
 ]
 

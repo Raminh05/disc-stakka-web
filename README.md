@@ -310,6 +310,12 @@ Existing databases migrate on startup (`db._migrate`). `media_type` becomes
 Blu-ray said nothing about content, so those discs arrive unclassified rather
 than guessed at.
 
+Box sets and multi-disc releases are listed as one entry. Open any disc and use
+*Add another disc to this set* to load the next one, or pick a set under *Part of
+a set* on a disc's edit page to group discs that are already catalogued. The set
+holds the title, cover and category. Each disc keeps its own slot and its own
+*Get* button, because the carousel presents one disc at a time.
+
 ## Prior work
 
 None of this would exist without **Disc Stakka Controller for Linux** by Eddie

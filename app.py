@@ -209,7 +209,10 @@ def disc_page(disc_id):
         disc = db.get_disc(c, disc_id)
         if disc is None:
             abort(404)
-        return render_template("disc.html", disc=disc)
+        lead = db.lead_of(c, disc)
+        return render_template(
+            "disc.html", disc=disc, lead=lead, discs=db.set_discs(c, lead["id"])
+        )
     finally:
         c.close()
 
@@ -221,38 +224,95 @@ def disc_edit(disc_id):
         disc = db.get_disc(c, disc_id)
         if disc is None:
             abort(404)
+        lead = db.lead_of(c, disc)
 
-        if request.method == "POST":
-            title = (request.form.get("title") or "").strip()
-            if not title:
-                flash("A title is required.", "error")
-                return render_template("edit.html", disc=disc)
+        def form():
+            return render_template(
+                "edit.html",
+                disc=disc,
+                lead=lead,
+                has_members=db.has_members(c, disc_id),
+                leads=db.set_leads(c, disc_id),
+            )
 
-            category = taxonomy.category(request.form.get("category"))
-            fields = {
-                "title": title,
-                "subtitle": (request.form.get("subtitle") or "").strip() or None,
-                "category": category,
-                "platform": taxonomy.platform(category, request.form.get("platform")),
-                "notes": (request.form.get("notes") or "").strip() or None,
-            }
+        if request.method != "POST":
+            return form()
+
+        # Joining or leaving a set rewrites the title a running job reports.
+        job = job_using(disc_id, disc["slot"])
+        if job is not None:
+            flash("The unit is working on that disc. Wait for it to finish.", "warn")
+            return see_other(url_for("job_page", job_id=job.id))
+
+        fields = {}
+        if disc["disc_no"] is not None:
             try:
-                stem = art.ingest(
-                    request.files.get("art_file"),
-                    request.form.get("art_url"),
-                    replacing=disc["art_path"],
-                )
-                if stem:
-                    fields["art_path"] = stem
-            except art.ArtError as exc:
-                flash(str(exc), "error")
-                return render_template("edit.html", disc=disc)
+                fields["disc_no"] = int(request.form.get("disc_no", ""))
+            except ValueError:
+                flash("The disc number has to be a whole number.", "error")
+                return form()
+            if fields["disc_no"] < 1:
+                flash("Disc numbers start at 1.", "error")
+                return form()
 
+        if disc["parent_id"] is not None:
             db.update_disc(c, disc_id, **fields)
+            if request.form.get("set") == "":
+                db.leave_set(c, disc_id)
+                flash(
+                    "Disc %d is now a separate entry. Give it a name."
+                    % disc["disc_no"],
+                    "ok",
+                )
+                return see_other(url_for("disc_edit", disc_id=disc_id))
             flash("Saved.", "ok")
             return see_other(url_for("disc_page", disc_id=disc_id))
 
-        return render_template("edit.html", disc=disc)
+        new_lead = None
+        if request.form.get("set") and not db.has_members(c, disc_id):
+            try:
+                new_lead = db.get_disc(c, int(request.form["set"]))
+            except ValueError:
+                pass
+            if new_lead is None or new_lead["parent_id"] is not None:
+                flash("That set is no longer in the catalogue.", "error")
+                return form()
+
+        if new_lead is not None:
+            art.remove(db.join_set(c, disc_id, new_lead["id"]))
+            flash(
+                "Slot %d is now part of “%s”." % (disc["slot"], new_lead["title"]), "ok"
+            )
+            return see_other(url_for("disc_page", disc_id=disc_id))
+
+        title = (request.form.get("title") or "").strip()
+        if not title:
+            flash("A title is required.", "error")
+            return form()
+
+        category = taxonomy.category(request.form.get("category"))
+        fields.update(
+            title=title,
+            subtitle=(request.form.get("subtitle") or "").strip() or None,
+            category=category,
+            platform=taxonomy.platform(category, request.form.get("platform")),
+            notes=(request.form.get("notes") or "").strip() or None,
+        )
+        try:
+            stem = art.ingest(
+                request.files.get("art_file"),
+                request.form.get("art_url"),
+                replacing=disc["art_path"],
+            )
+            if stem:
+                fields["art_path"] = stem
+        except art.ArtError as exc:
+            flash(str(exc), "error")
+            return form()
+
+        db.update_disc(c, disc_id, **fields)
+        flash("Saved.", "ok")
+        return see_other(url_for("disc_page", disc_id=disc_id))
     finally:
         c.close()
 
@@ -276,9 +336,15 @@ def disc_delete(disc_id):
                 if request.values.get("from") == "list"
                 else url_for("disc_page", disc_id=disc_id)
             )
-            return render_template("confirm_delete.html", disc=disc, back=back)
-        db.delete_disc(c, disc_id)
-        art.remove(disc["art_path"])
+            return render_template(
+                "confirm_delete.html",
+                disc=disc,
+                back=back,
+                discs=db.set_discs(c, db.lead_of(c, disc)["id"]),
+            )
+        _, heir = db.delete_disc(c, disc_id)
+        if heir is None:
+            art.remove(disc["art_path"])
         if disc["status"] == db.OUT:
             detail = (
                 "It was checked out, so slot %d is no longer held for "
@@ -290,7 +356,10 @@ def disc_delete(disc_id):
                 "is still there, but the catalogue now lists the slot "
                 "as free." % disc["slot"]
             )
-        flash("Removed “%s” from the catalogue. %s" % (disc["title"], detail), "warn")
+        flash(
+            "Removed “%s” from the catalogue. %s" % (db.disc_name(disc), detail),
+            "warn",
+        )
         return see_other(url_for("index"))
     finally:
         c.close()
@@ -311,7 +380,7 @@ def disc_eject(disc_id):
             return see_other(url_for("disc_page", disc_id=disc_id))
         job = jobs.Job(
             "eject",
-            "Eject %s (slot %d)" % (disc["title"], disc["slot"]),
+            "Eject %s (slot %d)" % (db.disc_name(disc), disc["slot"]),
             disc_id=disc_id,
             slot=disc["slot"],
         )
@@ -332,7 +401,7 @@ def disc_return(disc_id):
             return see_other(url_for("disc_page", disc_id=disc_id))
         job = jobs.Job(
             "return",
-            "Return %s to slot %d" % (disc["title"], disc["slot"]),
+            "Return %s to slot %d" % (db.disc_name(disc), disc["slot"]),
             disc_id=disc_id,
             slot=disc["slot"],
         )
@@ -345,18 +414,41 @@ def disc_return(disc_id):
 def add():
     c = conn()
     try:
+        lead = None
+        if request.values.get("set"):
+            try:
+                lead = db.get_disc(c, int(request.values["set"]))
+            except ValueError:
+                pass
+            if lead is None or lead["parent_id"] is not None:
+                flash("That set is no longer in the catalogue.", "error")
+                return see_other(url_for("add"))
+        again = url_for("add", set=lead["id"] if lead else None)
+
         if request.method == "POST":
             slot = _form_slot()
             if slot is None:
-                return see_other(url_for("add"))
+                return see_other(again)
             if db.get_by_slot(c, slot) is not None:
                 flash("Slot %d is already spoken for." % slot, "error")
-                return see_other(url_for("add"))
-            job = jobs.Job("add", "Load a disc into slot %d" % slot, slot=slot)
-            return start_job(job, flows.run_add, slot)
+                return see_other(again)
+            if lead is None:
+                job = jobs.Job("add", "Load a disc into slot %d" % slot, slot=slot)
+                return start_job(job, flows.run_add, slot)
+            job = jobs.Job(
+                "add",
+                "Load disc %d of %s into slot %d"
+                % (db.next_disc_no(c, lead["id"]), lead["title"], slot),
+                slot=slot,
+            )
+            return start_job(job, flows.run_add, slot, None, lead["id"])
 
         return render_template(
-            "add.html", free=db.free_slots(c), suggested=db.next_free_slot(c)
+            "add.html",
+            free=db.free_slots(c),
+            suggested=db.next_free_slot(c),
+            lead=lead,
+            disc_no=db.next_disc_no(c, lead["id"]) if lead else None,
         )
     finally:
         c.close()
@@ -442,7 +534,7 @@ def device_reset():
 def reconcile():
     c = conn()
     try:
-        by_slot = {row["slot"]: row for row in db.list_discs(c, 1, SLOT_MAX)}
+        by_slot = {row["slot"]: row for row in db.all_discs(c)}
         slots = [(n, by_slot.get(n)) for n in range(SLOT_MIN, SLOT_MAX + 1)]
         return render_template("reconcile.html", slots=slots)
     finally:

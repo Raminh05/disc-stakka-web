@@ -93,18 +93,20 @@ def run_eject(ds, conn, job, trace, disc_id):
     db.mark_out(conn, disc_id)
     job.succeed(
         "A disc was taken from slot %d. The catalogue now lists %s "
-        "as checked out and holds the slot for its return." % (slot, disc["title"]),
+        "as checked out and holds the slot for its return."
+        % (slot, db.disc_name(disc)),
         disc_id=disc_id,
     )
 
 
-def run_add(ds, conn, job, trace, slot, disc_id=None):
+def run_add(ds, conn, job, trace, slot, disc_id=None, parent_id=None):
     """Load a disc into ``slot``.
 
     ``disc_id`` set means this is a return: the disc is already catalogued and
     its slot was reserved. Otherwise a placeholder row is created once the disc
     is physically in, so the catalogue never loses track of it even if the user
-    abandons the metadata form.
+    abandons the metadata form. With ``parent_id`` that row is the next disc of
+    a set, which already has its details.
     """
     returning = disc_id is not None
 
@@ -139,7 +141,10 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
     # slot the catalogue calls free.
     if returning:
         db.mark_stored(conn, disc_id)
+    elif parent_id is not None and db.get_disc(conn, parent_id) is not None:
+        disc_id = db.create_disc(conn, slot, title=None, parent_id=parent_id)
     else:
+        parent_id = None
         disc_id = db.create_disc(conn, slot, title="Untitled disc (slot %d)" % slot)
 
     # The unit has been spitting discs back out after a nominally successful
@@ -156,7 +161,13 @@ def run_add(ds, conn, job, trace, slot, disc_id=None):
     if returning:
         disc = db.get_disc(conn, disc_id)
         job.succeed(
-            "%s is back in slot %d." % (disc["title"] if disc else "Disc", slot),
+            "%s is back in slot %d." % (db.disc_name(disc) if disc else "Disc", slot),
+            disc_id=disc_id,
+        )
+    elif parent_id is not None:
+        disc = db.get_disc(conn, disc_id)
+        job.succeed(
+            "%s is loaded into slot %d." % (db.disc_name(disc), slot),
             disc_id=disc_id,
         )
     else:

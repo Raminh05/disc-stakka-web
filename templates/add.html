@@ -1,15 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Add a disc &mdash; Disc Stakka{% endblock %}
 {% block content %}
+{% if lead %}
+<p class="crumb"><a href="{{ url_for('disc_page', disc_id=lead.id) }}">&laquo; {{ lead.title }}</a></p>
+<h1>Add disc {{ disc_no }} to {{ lead.title }}</h1>
+{% else %}
 <h1>Add a disc</h1>
+{% endif %}
 
 {% if not free %}
   <p class="empty">Every slot is spoken for. Remove something first.</p>
 {% else %}
 <p>Pick a slot. The carousel turns to it, then asks you to feed the disc in.
-You will name it afterwards.</p>
+{% if lead %}It joins the set, so there is nothing to fill in afterwards.
+{% else %}You will name it afterwards.{% endif %}</p>
 
 <form method="post" action="{{ url_for('add') }}">
+{% if lead %}<input type="hidden" name="set" value="{{ lead.id }}">{% endif %}
 <table class="form" cellspacing="0" cellpadding="0">
 <tr><th>Slot</th><td>
   <select name="slot">

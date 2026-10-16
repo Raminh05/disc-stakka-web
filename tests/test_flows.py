@@ -167,6 +167,21 @@ class Add(FlowTest):
         self.assertEqual(row["title"], "Untitled disc (slot 5)")
         self.assertTrue(snap["result"]["needs_details"])
 
+    def test_a_disc_loaded_into_a_set_joins_it_without_asking_for_details(self):
+        lead = self.disc(4, "Final Fantasy VII")
+        job = self.job("add", "Load disc 2", slot=5, when={jobs.AWAITING_INSERT: 3_000})
+        flows.run_add(self.ds, self.conn, job, job.trace, 5, None, lead)
+
+        snap = job.snapshot()
+        self.assertTrue(snap["ok"], snap["message"])
+        self.assertNotIn("needs_details", snap["result"])
+        row = db.get_disc(self.conn, snap["result"]["disc_id"])
+        self.assertEqual(
+            (row["slot"], row["parent_id"], row["disc_no"], row["title"]),
+            (5, lead, 2, "Final Fantasy VII"),
+        )
+        self.assertEqual(db.get_disc(self.conn, lead)["disc_no"], 1)
+
     def test_nothing_inserted_leaves_the_catalogue_alone(self):
         job = self.job("add", "Load a disc into slot 9", slot=9)
         flows.run_add(self.ds, self.conn, job, job.trace, 9)

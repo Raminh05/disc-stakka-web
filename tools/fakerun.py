@@ -41,6 +41,9 @@ SEED = [
     (18, "Spirited Away", "Studio Ghibli", "Movies", None),
 ]
 
+#: A three-disc set, lead first. Its ids follow SEED's, which ps3lint relies on.
+SEED_SET = (20, 21, 22)
+
 
 def seed(path):
     conn = db.connect(path)
@@ -54,9 +57,19 @@ def seed(path):
                 category=category,
                 platform=platform,
             )
+        lead = db.create_disc(
+            conn,
+            SEED_SET[0],
+            "Final Fantasy VII",
+            subtitle="Square",
+            category="Video games",
+            platform="PS1",
+        )
+        for slot in SEED_SET[1:]:
+            db.create_disc(conn, slot, None, parent_id=lead)
     finally:
         conn.close()
-    return {slot for slot, _, _, _, _ in SEED}
+    return {slot for slot, _, _, _, _ in SEED} | set(SEED_SET)
 
 
 def console(unit, transport):

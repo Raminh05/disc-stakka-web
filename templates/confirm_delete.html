@@ -6,11 +6,17 @@
 <h1>Remove this disc from the catalogue?</h1>
 
 <table class="facts" cellspacing="0" cellpadding="0">
-  <tr><th>Title</th><td>{{ disc.title }}</td></tr>
+  <tr><th>Title</th><td>{{ disc.title }}{% if disc.disc_no %}, disc {{ disc.disc_no }}{% endif %}</td></tr>
   <tr><th>Slot</th><td>{{ disc.slot }}</td></tr>
 </table>
 
-<p>The catalogue entry{% if disc.art_path %} and its cover art{% endif %} will be deleted.
+{% if discs and not disc.parent_id %}
+<p>This is the set's first entry. Only this disc is removed: the set keeps its
+details and cover, and the other {{ discs|length - 1 }} disc{% if discs|length > 2 %}s stay{% else %} stays{% endif %} in the catalogue.</p>
+{% elif discs %}
+<p>Only this disc is removed. The rest of the set stays in the catalogue.</p>
+{% endif %}
+<p>The catalogue entry{% if disc.art_path and not discs %} and its cover art{% endif %} will be deleted.
 {% if disc.status == 'out' %}
   The disc is checked out, so slot {{ disc.slot }} will stop being held for its return.
 {% else %}

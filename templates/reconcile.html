@@ -22,7 +22,7 @@ us what is really in a slot, so if the two drift apart, this is where you fix it
   {% for slot, disc in chunk %}
     <td class="{% if disc %}{% if disc.status == 'out' %}slot-out{% else %}slot-full{% endif %}{% else %}slot-free{% endif %}">
       {% if disc %}<a href="{{ url_for('disc_page', disc_id=disc.id) }}"
-                      title="{{ disc.title }}">{{ slot }}</a>
+                      title="{{ disc.title }}{% if disc.disc_no %}, disc {{ disc.disc_no }}{% endif %}">{{ slot }}</a>
       {% else %}{{ slot }}{% endif %}
     </td>
   {% endfor %}

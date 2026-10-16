@@ -9,6 +9,7 @@ import re
 import shutil
 import tempfile
 import unittest
+from unittest import mock
 
 import app as app_module
 from discstakka import device, protocol
@@ -333,6 +334,130 @@ class Jobs(WebTest):
         self.assertEqual(response.status_code, 303)
         self.assertTrue(response.headers["Location"].endswith("/"))
         self.assertEqual(self.client.get("/job/nope.json").status_code, 404)
+
+
+class Sets(WebTest):
+    """Discs that belong together: listed once, ejected one at a time."""
+
+    def setUp(self):
+        WebTest.setUp(self)
+        self.lead = db.create_disc(
+            self.conn, 10, "Final Fantasy VII", category="Video games"
+        )
+        self.second = db.create_disc(self.conn, 11, None, parent_id=self.lead)
+        self.third = db.create_disc(self.conn, 12, None, parent_id=self.lead)
+        self.removed = []
+        patch = mock.patch.object(app_module.art, "remove", self.removed.append)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def row(self, disc_id):
+        return db.get_disc(self.conn, disc_id)
+
+    def test_a_set_is_listed_once_with_every_slot(self):
+        page = self.body("/?view=list")
+        self.assertEqual(page.count("Final Fantasy VII"), 1)
+        self.assertIn("10, 11, 12", page)
+        self.assertIn("3 discs", page)
+
+    def test_any_checked_out_disc_finds_the_set_under_checked_out(self):
+        db.mark_out(self.conn, self.third)
+        page = self.body("/?status=out")
+        self.assertIn("Final Fantasy VII", page)
+        self.assertIn("1 OF 3 OUT", page)
+
+    def test_the_set_page_has_an_eject_for_each_disc(self):
+        page = self.body("/disc/%d" % self.second)
+        for disc_id in (self.lead, self.second, self.third):
+            self.assertIn('action="/disc/%d/eject"' % disc_id, page)
+        self.assertIn("Video games", page, "a member shows the set's details")
+
+    def test_an_eject_names_the_disc_within_the_set(self):
+        self.unit.occupied.add(11)
+        response = self.client.post("/disc/%d/eject" % self.second)
+        job = self.controller.registry.get(
+            response.headers["Location"].rsplit("/", 1)[1]
+        )
+        self.assertEqual(job.title, "Eject Final Fantasy VII, disc 2 (slot 11)")
+
+    def test_renaming_the_set_renames_every_disc(self):
+        self.client.post(
+            "/disc/%d/edit" % self.lead, data={"title": "FFVII", "disc_no": "1"}
+        )
+        self.assertEqual(self.row(self.third)["title"], "FFVII")
+
+    def test_joining_a_set_gives_up_the_discs_own_details(self):
+        loose = db.create_disc(
+            self.conn, 13, "FF7 disc 4", category="Music", art_path="cover"
+        )
+        response = self.client.post(
+            "/disc/%d/edit" % loose, data={"set": str(self.lead), "title": "x"}
+        )
+        self.assertEqual(response.status_code, 303)
+        row = self.row(loose)
+        self.assertEqual(
+            (row["parent_id"], row["disc_no"], row["title"], row["category"]),
+            (self.lead, 4, "Final Fantasy VII", None),
+        )
+        self.assertEqual(self.removed, ["cover"])
+
+    def test_a_set_cannot_join_another(self):
+        other = db.create_disc(self.conn, 20, "Ico")
+        self.client.post(
+            "/disc/%d/edit" % self.lead,
+            data={"set": str(other), "title": "Final Fantasy VII", "disc_no": "1"},
+        )
+        self.assertIsNone(self.row(self.lead)["parent_id"])
+
+    def test_a_set_down_to_one_disc_is_a_plain_disc_again(self):
+        self.client.post(
+            "/disc/%d/edit" % self.second, data={"set": "", "disc_no": "2"}
+        )
+        self.client.post("/disc/%d/delete" % self.third, data={"confirm": "yes"})
+        self.assertIsNone(self.row(self.lead)["disc_no"])
+        self.assertIsNone(self.row(self.second)["parent_id"])
+        self.assertIsNone(self.row(self.second)["disc_no"])
+
+    def test_removing_the_lead_hands_the_set_to_the_next_disc(self):
+        db.update_disc(self.conn, self.lead, art_path="cover")
+        self.client.post("/disc/%d/delete" % self.lead, data={"confirm": "yes"})
+        heir = self.row(self.second)
+        self.assertIsNone(heir["parent_id"])
+        self.assertEqual(heir["art_path"], "cover")
+        self.assertEqual(heir["category"], "Video games")
+        self.assertEqual(self.row(self.third)["parent_id"], self.second)
+        self.assertEqual(self.removed, [], "the cover moved with the set")
+
+    def test_adding_to_a_set_names_the_disc_and_slot(self):
+        response = self.client.post("/add", data={"slot": "13", "set": str(self.lead)})
+        self.assertEqual(response.status_code, 303)
+        job = self.controller.registry.get(
+            response.headers["Location"].rsplit("/", 1)[1]
+        )
+        self.assertEqual(job.title, "Load disc 4 of Final Fantasy VII into slot 13")
+        self.assertIn(
+            "Add disc 4 to Final Fantasy VII", self.body("/add?set=%d" % self.lead)
+        )
+
+    def test_a_member_cannot_lead_a_new_disc(self):
+        response = self.client.get("/add?set=%d" % self.second)
+        self.assertEqual(response.status_code, 303)
+
+    def test_a_disc_the_unit_is_working_on_cannot_change_set(self):
+        loose = db.create_disc(self.conn, 13, "Ico")
+        job = self.controller.submit(
+            stub := _Stub(), lambda ds, conn, job, trace: job.hold.wait(5)
+        )
+        job.disc_id = loose
+        try:
+            response = self.client.post(
+                "/disc/%d/edit" % loose, data={"set": str(self.lead), "title": "Ico"}
+            )
+            self.assertRegex(response.headers["Location"], r"/job/%s$" % job.id)
+            self.assertIsNone(self.row(loose)["parent_id"])
+        finally:
+            stub.hold.set()
+        _wait(job)
 
 
 def _Stub():

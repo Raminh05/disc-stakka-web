@@ -3,11 +3,40 @@
 {% block content %}
 
 <p class="crumb"><a href="{{ url_for('disc_page', disc_id=disc.id) }}">&laquo; Back</a></p>
-<h1>Slot {{ disc.slot }}</h1>
+<h1>Slot {{ disc.slot }}{% if disc.disc_no %} &middot; disc {{ disc.disc_no }} of {{ lead.title }}{% endif %}</h1>
 
 <form method="post" action="{{ url_for('disc_edit', disc_id=disc.id) }}"
       enctype="multipart/form-data">
 <table class="form" cellspacing="0" cellpadding="0">
+{% if disc.disc_no %}
+<tr><th>Disc number</th><td>
+  <input type="text" name="disc_no" value="{{ disc.disc_no }}" size="4"></td></tr>
+{% endif %}
+{% if disc.parent_id %}
+<tr><th>Set</th><td>
+  <select name="set">
+    <option value="{{ lead.id }}" selected>{{ lead.title }}</option>
+    <option value="">Not part of a set</option>
+  </select>
+  <p class="hint">The title, cover and the rest belong to the whole set.
+  <a href="{{ url_for('disc_edit', disc_id=lead.id) }}">Edit the set</a>.</p></td></tr>
+<tr><th></th><td>
+  <input type="submit" value="Save" class="primary">
+  <a href="{{ url_for('disc_page', disc_id=disc.id) }}">Cancel</a></td></tr>
+</table>
+</form>
+{% else %}
+{% if not has_members and leads %}
+<tr><th>Part of a set</th><td>
+  <select name="set">
+    <option value="">&mdash;</option>
+    {% for l in leads %}
+      <option value="{{ l.id }}">{{ l.title }}</option>
+    {% endfor %}
+  </select>
+  <p class="hint">Joining a set replaces this disc's details and cover with the
+  set's. The other fields below are then ignored.</p></td></tr>
+{% endif %}
 <tr><th>Title</th><td>
   <input type="text" name="title" value="{{ disc.title }}" size="34"></td></tr>
 <tr><th>Artist / studio</th><td>
@@ -45,4 +74,5 @@
   <a href="{{ url_for('disc_page', disc_id=disc.id) }}">Cancel</a></td></tr>
 </table>
 </form>
+{% endif %}
 {% endblock %}

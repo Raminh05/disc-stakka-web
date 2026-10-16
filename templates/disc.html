@@ -1,32 +1,67 @@
 {% extends "base.html" %}
-{% block title %}{{ disc.title }} &mdash; Disc Stakka{% endblock %}
+{% block title %}{{ lead.title }} &mdash; Disc Stakka{% endblock %}
 {% block content %}
 
 <p class="crumb"><a href="{{ url_for('index') }}">&laquo; Catalogue</a></p>
 
 <table width="100%" cellspacing="0" cellpadding="0"><tr>
 <td width="220" valign="top">
-  {% if disc.art_path %}
-    <img src="{{ url_for('static', filename='art/' + disc.art_path + '_full.jpg') }}"
+  {% if lead.art_path %}
+    <img src="{{ url_for('static', filename='art/' + lead.art_path + '_full.jpg') }}"
          alt="" class="cover">
   {% else %}
     <div class="noart big">no art</div>
   {% endif %}
 </td>
 <td valign="top" class="detail">
-  <h1>{{ disc.title }}</h1>
-  {% if disc.subtitle %}<p class="sub">{{ disc.subtitle }}</p>{% endif %}
+  <h1>{{ lead.title }}</h1>
+  {% if lead.subtitle %}<p class="sub">{{ lead.subtitle }}</p>{% endif %}
 
   <table class="facts" cellspacing="0" cellpadding="0">
-    <tr><th>Slot</th><td>{{ disc.slot }}</td></tr>
-    {% if disc.category %}
+    {% if lead.category %}
       <tr><th>Category</th><td>
-        <a href="{{ url_for('index', category=disc.category) }}">{{ disc.category }}</a></td></tr>
+        <a href="{{ url_for('index', category=lead.category) }}">{{ lead.category }}</a></td></tr>
     {% endif %}
-    {% if disc.platform %}
+    {% if lead.platform %}
       <tr><th>Console</th><td>
-        <a href="{{ url_for('index', category=disc.category, platform=disc.platform) }}">{{ disc.platform }}</a></td></tr>
+        <a href="{{ url_for('index', category=lead.category, platform=lead.platform) }}">{{ lead.platform }}</a></td></tr>
     {% endif %}
+    {% if discs %}
+      <tr><th>Discs</th><td>{{ discs|length }}</td></tr>
+    {% endif %}
+  </table>
+
+  {% if lead.notes %}<p class="notes">{{ lead.notes }}</p>{% endif %}
+
+  {% if discs %}
+  <table class="list" width="100%" cellspacing="0" cellpadding="0">
+  <tr><th>Disc</th><th>Slot</th><th>Status</th><th>&nbsp;</th></tr>
+  {% for d in discs %}
+  <tr>
+    <td>{% if d.id == disc.id %}<strong>Disc {{ d.disc_no }}</strong>
+      {% else %}<a href="{{ url_for('disc_page', disc_id=d.id) }}">Disc {{ d.disc_no }}</a>{% endif %}</td>
+    <td class="slot">{{ "%02d"|format(d.slot) }}</td>
+    <td>{% if d.status == 'out' %}<span class="tag-out">CHECKED OUT</span>{% else %}In the unit{% endif %}</td>
+    <td class="row-actions">
+    {% if d.status == 'out' %}
+      <form method="post" action="{{ url_for('disc_return', disc_id=d.id) }}"><input type="submit" value="Put back"></form>
+    {% else %}
+      <form method="post" action="{{ url_for('disc_eject', disc_id=d.id) }}"><input type="submit" value="Get"></form>
+    {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </table>
+  {% endif %}
+
+  <form method="get" action="{{ url_for('add') }}">
+    <input type="hidden" name="set" value="{{ lead.id }}">
+    <input type="submit" value="{% if discs %}Add another disc to this set{% else %}Add a second disc to make a set{% endif %}">
+  </form>
+
+  {% if discs %}<h2>Disc {{ disc.disc_no }}</h2>{% endif %}
+  <table class="facts" cellspacing="0" cellpadding="0">
+    <tr><th>Slot</th><td>{{ disc.slot }}</td></tr>
     <tr><th>Status</th><td>
       {% if disc.status == 'out' %}
         <strong class="tag-out">Checked out</strong>
@@ -34,8 +69,6 @@
       {% else %}In the unit{% endif %}
     </td></tr>
   </table>
-
-  {% if disc.notes %}<p class="notes">{{ disc.notes }}</p>{% endif %}
 
   <table cellspacing="0" cellpadding="0" class="actions"><tr>
   {% if disc.status == 'out' %}

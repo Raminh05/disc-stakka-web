@@ -154,6 +154,10 @@ console you can't see.
 **Database**
 - A slot is occupied when a row references it. A disc that is checked out
   keeps its slot.
+- A multi-disc set is its lead disc plus members whose `parent_id` points at
+  it. The lead carries the details and is the one catalogue entry; every disc
+  keeps its own slot and status, and the hardware only ever sees one disc.
+  Delete a lead through `db.delete_disc`, which hands the set on first.
 - Schema changes need a migration in `db._migrate`, because `schema.sql` never
   alters an existing table.
 - Log hardware actions to the `event` table.

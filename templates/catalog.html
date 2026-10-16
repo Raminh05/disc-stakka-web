@@ -64,20 +64,29 @@
 <tr><th>Slot</th><th>Title</th><th>Category</th><th>Console</th><th>Status</th><th>&nbsp;</th></tr>
 {% for disc in discs %}
 <tr>
-  <td class="slot">{{ "%02d"|format(disc.slot) }}</td>
+  <td class="slot">{% if disc.discs > 1 %}{{ disc.slots }}{% else %}{{ "%02d"|format(disc.slot) }}{% endif %}</td>
   <td>
     <a class="name" href="{{ url_for('disc_page', disc_id=disc.id) }}">{{ disc.title }}</a>
     {% if disc.subtitle %}<span class="sub">{{ disc.subtitle }}</span>{% endif %}
+    {% if disc.discs > 1 %}<span class="sub">{{ disc.discs }} discs</span>{% endif %}
   </td>
   <td>{{ disc.category or '&mdash;'|safe }}</td>
   <td>{{ disc.platform or '&mdash;'|safe }}</td>
   <td>
-    {% if disc.status == 'out' %}
+    {% if disc.discs > 1 %}
+      {% if disc.out_count %}<span class="tag-out">{{ disc.out_count }} OF {{ disc.discs }} OUT</span>
+      {% else %}In the unit{% endif %}
+    {% elif disc.status == 'out' %}
       <span class="tag-out">CHECKED OUT</span>
       {% if disc.checked_out_at %}<span class="sub">since {{ disc.checked_out_at[:10] }}</span>{% endif %}
     {% else %}In the unit{% endif %}
   </td>
   <td class="row-actions">
+    {% if disc.discs > 1 %}
+      {# Which disc to get is chosen on the set's page, and so is removing one. #}
+      <form method="get" action="{{ url_for('disc_page', disc_id=disc.id) }}"><input type="submit" value="Open"></form>
+      <form method="get" action="{{ url_for('disc_edit', disc_id=disc.id) }}"><input type="submit" value="Edit"></form>
+    {% else %}
     {% if disc.status == 'out' %}
       <form method="post" action="{{ url_for('disc_return', disc_id=disc.id) }}"><input type="submit" value="Put back"></form>
     {% else %}
@@ -85,6 +94,7 @@
     {% endif %}
     <form method="get" action="{{ url_for('disc_edit', disc_id=disc.id) }}"><input type="submit" value="Edit"></form>
     <form method="get" action="{{ url_for('disc_delete', disc_id=disc.id) }}"><input type="hidden" name="from" value="list"><input type="submit" value="Delete" class="danger"></form>
+    {% endif %}
   </td>
 </tr>
 {% endfor %}
@@ -108,8 +118,11 @@
       <span class="name">{{ disc.title }}</span>
     </a>
     {% if disc.subtitle %}<span class="sub">{{ disc.subtitle }}</span>{% endif %}
+    {% if disc.discs > 1 %}<span class="sub">{{ disc.discs }} discs</span>{% endif %}
     {% if disc.category %}<span class="kind">{{ disc.platform or disc.category }}</span>{% endif %}
-    {% if disc.status == 'out' %}<span class="tag-out">CHECKED OUT</span>{% endif %}
+    {% if disc.discs > 1 %}
+      {% if disc.out_count %}<span class="tag-out">{{ disc.out_count }} OF {{ disc.discs }} OUT</span>{% endif %}
+    {% elif disc.status == 'out' %}<span class="tag-out">CHECKED OUT</span>{% endif %}
   </td>
   {% endfor %}
   {% for _ in range(3 - row|length) %}<td width="33%">&nbsp;</td>{% endfor %}
