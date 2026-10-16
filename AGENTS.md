@@ -31,6 +31,7 @@ oldest browser it has to support is the PlayStation 3's NetFront.
 | `static/modern.css` | Enhancements, all inside `@supports` |
 | `static/enhance.js` | Optional XHR polling. Nothing depends on it |
 | `tools/ps3lint.py` | Checks served pages and CSS for things the PS3 can't handle |
+| `tools/drawlogo.py` | Draws `static/logo*.png` and `favicon.ico`. Rerun it after changing the logo |
 | `tools/fakerun.py` | The real app against a simulated carousel, no hardware |
 | `tests/clock.py` | Virtual clock, so the real 30 s timeouts cost no wall time |
 | `.github/workflows/ci.yml` | Ruff, suite on Linux/macOS/Windows, suite-without-hidapi, nix shell, image |

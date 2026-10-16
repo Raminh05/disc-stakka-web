@@ -85,6 +85,7 @@
     @media (max-width: 640px) {
         .nav a { margin-left: 14px; font-size: 16px; }
         .brand a { font-size: 20px; }
+        .brand img { width: 42px; height: 36px; margin-right: 6px; }
         .detail { padding-left: 0; }
     }
 }

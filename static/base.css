@@ -31,7 +31,13 @@ h2 { font-size: 22px; margin: 28px 0 10px 0; color: #ffb340;
 
 .bar          { background: #0d0f12; border-bottom: 2px solid #ffb340; }
 .bar td       { padding: 14px 32px; }
-.brand a      { color: #fff; font-size: 24px; font-weight: bold; }
+.bar td.brand { padding-top: 8px; padding-bottom: 8px; white-space: nowrap; }
+.brand a      { color: #fff; font-size: 26px; font-weight: bold; }
+.brand a:hover { text-decoration: none; }
+.brand img    { vertical-align: middle; border: 0; margin-right: 10px; }
+.brand .word  { vertical-align: middle; letter-spacing: -1px;
+                font-family: "Arial Rounded MT Bold", "Trebuchet MS", Verdana, sans-serif; }
+.brand .stakka { color: #ffb340; }
 .nav          { text-align: right; }
 .nav a        { margin-left: 22px; font-size: 18px; }
 

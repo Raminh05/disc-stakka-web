@@ -4,6 +4,7 @@
 <!-- http-equiv form, not the <meta charset> shorthand: NetFront predates it. -->
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 <title>{% block title %}Disc Stakka{% endblock %}</title>
+<link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='base.css') }}">
 <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='modern.css') }}">
 {% block head %}{% endblock %}
@@ -12,7 +13,7 @@
 
 <table class="bar" width="100%" cellspacing="0" cellpadding="0">
 <tr>
-  <td class="brand"><a href="{{ url_for('index') }}">Disc Stakka</a></td>
+  <td class="brand"><a href="{{ url_for('index') }}"><img src="{{ url_for('static', filename='logo.png') }}" srcset="{{ url_for('static', filename='logo@2x.png') }} 2x" width="56" height="48" alt=""><span class="word">disc<span class="stakka">stakka</span></span></a></td>
   <td class="nav">
     <a href="{{ url_for('index') }}">Catalogue</a>
     <a href="{{ url_for('add') }}">Add a disc</a>
